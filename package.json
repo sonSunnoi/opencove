@@ -1,0 +1,52 @@
+{
+  "name": "cove",
+  "version": "0.1.0",
+  "description": "Cove - Electron + React + TypeScript Application",
+  "main": "./out/main/index.js",
+  "author": "deadwave",
+  "license": "MIT",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "check": "tsc --noEmit",
+    "preview": "electron-vite preview",
+    "postinstall": "electron-builder install-app-deps",
+    "build:unpack": "pnpm build && electron-builder --dir",
+    "build:mac": "pnpm build && electron-builder --mac",
+    "build:win": "pnpm build && electron-builder --win",
+    "build:linux": "pnpm build && electron-builder --linux",
+    "test": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test",
+    "lint": "oxlint .",
+    "lint:fix": "oxlint --fix .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "dependencies": {
+    "@electron-toolkit/preload": "^3.0.1",
+    "@electron-toolkit/utils": "^3.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@electron-toolkit/tsconfig": "^1.0.1",
+    "@playwright/test": "^1.58.1",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^4.0.18",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^5.0.0",
+    "happy-dom": "^20.5.0",
+    "oxlint": "^1.43.0",
+    "prettier": "^3.8.1",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3",
+    "vitest": "^4.0.18"
+  }
+}
