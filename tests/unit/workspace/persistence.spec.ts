@@ -52,6 +52,8 @@ describe('workspace persistence', () => {
         path: '/tmp/cove',
         viewport: { x: -320, y: 180, zoom: 1.25 },
         isMinimapVisible: false,
+        spaces: [],
+        activeSpaceId: null,
         nodes: [
           {
             id: 'node-1',
@@ -171,6 +173,8 @@ describe('workspace persistence', () => {
     expect(restored?.workspaces[0].nodes[1].task?.status).toBe('doing')
     expect(restored?.workspaces[0].nodes[2].kind).toBe('agent')
     expect(restored?.workspaces[0].nodes[2].agent?.provider).toBe('codex')
+    expect(restored?.workspaces[0].spaces).toEqual([])
+    expect(restored?.workspaces[0].activeSpaceId).toBeNull()
     expect(restored?.settings.defaultProvider).toBe('claude-code')
     expect(restored?.settings.customModelEnabledByProvider.codex).toBe(true)
     expect(restored?.settings.customModelByProvider.codex).toBe('gpt-5.2-codex')
@@ -197,6 +201,8 @@ describe('workspace persistence', () => {
           path: '/tmp/cove',
           viewport: { x: 0, y: 0, zoom: 1 },
           isMinimapVisible: true,
+          spaces: [],
+          activeSpaceId: null,
           nodes: [
             {
               id: 'terminal-1',
@@ -282,6 +288,67 @@ describe('workspace persistence', () => {
     expect(restored?.workspaces).toHaveLength(1)
     expect(restored?.workspaces[0].viewport).toEqual(DEFAULT_WORKSPACE_VIEWPORT)
     expect(restored?.workspaces[0].isMinimapVisible).toBe(true)
+    expect(restored?.workspaces[0].spaces).toEqual([])
+    expect(restored?.workspaces[0].activeSpaceId).toBeNull()
+  })
+
+  it('persists workspace spaces and active space id', () => {
+    writeRawPersistedState(
+      JSON.stringify({
+        activeWorkspaceId: 'workspace-1',
+        workspaces: [
+          {
+            id: 'workspace-1',
+            name: 'cove',
+            path: '/tmp/cove',
+            viewport: { x: 0, y: 0, zoom: 1 },
+            isMinimapVisible: true,
+            nodes: [
+              {
+                id: 'node-1',
+                title: 'terminal-1',
+                position: { x: 120, y: 140 },
+                width: 460,
+                height: 300,
+                kind: 'terminal',
+                status: null,
+                startedAt: null,
+                endedAt: null,
+                exitCode: null,
+                lastError: null,
+                scrollback: null,
+                agent: null,
+                task: null,
+              },
+            ],
+            spaces: [
+              {
+                id: 'space-1',
+                name: 'Backlog',
+                directoryPath: '/tmp/cove',
+                nodeIds: ['node-1'],
+                rect: {
+                  x: 10,
+                  y: 20,
+                  width: 300,
+                  height: 240,
+                },
+              },
+            ],
+            activeSpaceId: 'space-1',
+          },
+        ],
+        settings: {},
+      }),
+    )
+
+    const restored = readPersistedState()
+    expect(restored).not.toBeNull()
+    expect(restored?.workspaces[0].spaces).toHaveLength(1)
+    expect(restored?.workspaces[0].spaces[0].name).toBe('Backlog')
+    expect(restored?.workspaces[0].spaces[0].directoryPath).toBe('/tmp/cove')
+    expect(restored?.workspaces[0].spaces[0].nodeIds).toEqual(['node-1'])
+    expect(restored?.workspaces[0].activeSpaceId).toBe('space-1')
   })
 
   it('returns null when stored json is invalid', () => {

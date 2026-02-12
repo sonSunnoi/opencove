@@ -199,6 +199,8 @@ function App(): React.JSX.Element {
           zoom: workspace.viewport.zoom,
         },
         isMinimapVisible: workspace.isMinimapVisible,
+        spaces: workspace.spaces,
+        activeSpaceId: workspace.activeSpaceId,
       })),
     )
     setActiveWorkspaceId(resolvedActiveWorkspaceId)
@@ -329,6 +331,8 @@ function App(): React.JSX.Element {
           zoom: workspace.viewport.zoom,
         },
         isMinimapVisible: workspace.isMinimapVisible,
+        spaces: workspace.spaces,
+        activeSpaceId: workspace.activeSpaceId,
       }
     }
 
@@ -477,6 +481,8 @@ function App(): React.JSX.Element {
       nodes: [],
       viewport: createDefaultWorkspaceViewport(),
       isMinimapVisible: DEFAULT_WORKSPACE_MINIMAP_VISIBLE,
+      spaces: [],
+      activeSpaceId: null,
     }
 
     setWorkspaces(prev => [...prev, nextWorkspace])
@@ -496,9 +502,20 @@ function App(): React.JSX.Element {
             return workspace
           }
 
+          const nodeIds = new Set(nodes.map(node => node.id))
+          const nextSpaces = workspace.spaces.map(space => ({
+            ...space,
+            nodeIds: space.nodeIds.filter(nodeId => nodeIds.has(nodeId)),
+          }))
+          const hasActiveSpace =
+            workspace.activeSpaceId !== null &&
+            nextSpaces.some(space => space.id === workspace.activeSpaceId)
+
           return {
             ...workspace,
             nodes,
+            spaces: nextSpaces,
+            activeSpaceId: hasActiveSpace ? workspace.activeSpaceId : null,
           }
         }),
       )
@@ -566,12 +583,82 @@ function App(): React.JSX.Element {
     [activeWorkspace],
   )
 
+  const handleWorkspaceSpacesChange = useCallback(
+    (spaces: WorkspaceState['spaces']): void => {
+      if (!activeWorkspace) {
+        return
+      }
+
+      setWorkspaces(previous =>
+        previous.map(workspace => {
+          if (workspace.id !== activeWorkspace.id) {
+            return workspace
+          }
+
+          const hasActiveSpace =
+            workspace.activeSpaceId !== null &&
+            spaces.some(space => space.id === workspace.activeSpaceId)
+
+          return {
+            ...workspace,
+            spaces,
+            activeSpaceId: hasActiveSpace ? workspace.activeSpaceId : null,
+          }
+        }),
+      )
+    },
+    [activeWorkspace],
+  )
+
+  const handleWorkspaceActiveSpaceChange = useCallback(
+    (spaceId: string | null): void => {
+      if (!activeWorkspace) {
+        return
+      }
+
+      setWorkspaces(previous =>
+        previous.map(workspace => {
+          if (workspace.id !== activeWorkspace.id) {
+            return workspace
+          }
+
+          const hasTargetSpace =
+            spaceId !== null && workspace.spaces.some(space => space.id === spaceId)
+          const nextSpaceId = hasTargetSpace ? spaceId : null
+          if (workspace.activeSpaceId === nextSpaceId) {
+            return workspace
+          }
+
+          return {
+            ...workspace,
+            activeSpaceId: nextSpaceId,
+          }
+        }),
+      )
+    },
+    [activeWorkspace],
+  )
+
+  const activeSpaceName = useMemo(() => {
+    if (!activeWorkspace || !activeWorkspace.activeSpaceId) {
+      return 'All'
+    }
+
+    return (
+      activeWorkspace.spaces.find(space => space.id === activeWorkspace.activeSpaceId)?.name ??
+      'All'
+    )
+  }, [activeWorkspace])
+
   return (
     <>
       <div className="app-shell">
         <aside className="workspace-sidebar">
           <div className="workspace-sidebar__header">
-            <h1>Workspaces</h1>
+            <div className="workspace-sidebar__header-main">
+              <h1>Projects</h1>
+              <span className="workspace-sidebar__space-label">Space: {activeSpaceName}</span>
+            </div>
             <button type="button" onClick={() => void handleAddWorkspace()}>
               Add
             </button>
@@ -585,7 +672,7 @@ function App(): React.JSX.Element {
 
           <div className="workspace-sidebar__list">
             {workspaces.length === 0 ? (
-              <p className="workspace-sidebar__empty">No workspace yet.</p>
+              <p className="workspace-sidebar__empty">No project yet.</p>
             ) : null}
 
             {workspaces.map(workspace => {
@@ -733,6 +820,10 @@ function App(): React.JSX.Element {
               isMinimapVisible={activeWorkspace.isMinimapVisible}
               onViewportChange={handleWorkspaceViewportChange}
               onMinimapVisibilityChange={handleWorkspaceMinimapVisibilityChange}
+              spaces={activeWorkspace.spaces}
+              activeSpaceId={activeWorkspace.activeSpaceId}
+              onSpacesChange={handleWorkspaceSpacesChange}
+              onActiveSpaceChange={handleWorkspaceActiveSpaceChange}
               agentSettings={agentSettings}
               focusNodeId={
                 focusRequest && focusRequest.workspaceId === activeWorkspace.id
@@ -747,10 +838,10 @@ function App(): React.JSX.Element {
             />
           ) : (
             <div className="workspace-empty-state">
-              <h2>Add a workspace to start</h2>
-              <p>Each workspace has its own infinite canvas and terminals.</p>
+              <h2>Add a project to start</h2>
+              <p>Each project has its own infinite canvas and terminals.</p>
               <button type="button" onClick={() => void handleAddWorkspace()}>
-                Add Workspace
+                Add Project
               </button>
             </div>
           )}

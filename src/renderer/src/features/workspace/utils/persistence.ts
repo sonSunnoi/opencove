@@ -18,6 +18,8 @@ import {
   type TaskNodeData,
   type TaskPriority,
   type TaskRuntimeStatus,
+  type WorkspaceSpaceRect,
+  type WorkspaceSpaceState,
   type WorkspaceViewport,
   type WorkspaceNodeKind,
   type WorkspaceState,
@@ -178,6 +180,81 @@ function normalizeWorkspaceMinimapVisible(value: unknown): boolean {
   return typeof value === 'boolean' ? value : DEFAULT_WORKSPACE_MINIMAP_VISIBLE
 }
 
+function normalizeWorkspaceSpaceRect(value: unknown): WorkspaceSpaceRect | null {
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+
+  const record = value as Record<string, unknown>
+  const x = record.x
+  const y = record.y
+  const width = record.width
+  const height = record.height
+
+  if (
+    typeof x !== 'number' ||
+    !Number.isFinite(x) ||
+    typeof y !== 'number' ||
+    !Number.isFinite(y) ||
+    typeof width !== 'number' ||
+    !Number.isFinite(width) ||
+    width <= 0 ||
+    typeof height !== 'number' ||
+    !Number.isFinite(height) ||
+    height <= 0
+  ) {
+    return null
+  }
+
+  return {
+    x,
+    y,
+    width,
+    height,
+  }
+}
+
+function normalizeWorkspaceSpaceNodeIds(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+
+  return [
+    ...new Set(
+      value
+        .map(item => (typeof item === 'string' ? item.trim() : ''))
+        .filter(item => item.length > 0),
+    ),
+  ]
+}
+
+function ensurePersistedWorkspaceSpace(
+  value: unknown,
+  workspacePath: string,
+): WorkspaceSpaceState | null {
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+
+  const record = value as Record<string, unknown>
+  const id = record.id
+  const name = record.name
+
+  if (typeof id !== 'string' || typeof name !== 'string') {
+    return null
+  }
+
+  const normalizedDirectoryPath = normalizeOptionalString(record.directoryPath) ?? workspacePath
+
+  return {
+    id,
+    name,
+    directoryPath: normalizedDirectoryPath,
+    nodeIds: normalizeWorkspaceSpaceNodeIds(record.nodeIds),
+    rect: normalizeWorkspaceSpaceRect(record.rect),
+  }
+}
+
 function ensurePersistedAgentData(value: unknown): AgentNodeData | null {
   if (!value || typeof value !== 'object') {
     return null
@@ -297,6 +374,8 @@ function ensurePersistedWorkspace(workspace: unknown): PersistedWorkspaceState |
   const name = record.name
   const path = record.path
   const nodes = record.nodes
+  const spaces = record.spaces
+  const activeSpaceId = record.activeSpaceId
 
   if (typeof id !== 'string' || typeof name !== 'string' || typeof path !== 'string') {
     return null
@@ -310,6 +389,23 @@ function ensurePersistedWorkspace(workspace: unknown): PersistedWorkspaceState |
     .map(node => ensurePersistedNode(node))
     .filter((node): node is PersistedTerminalNode => node !== null)
 
+  const normalizedSpaces = Array.isArray(spaces)
+    ? spaces
+        .map(item => ensurePersistedWorkspaceSpace(item, path))
+        .filter((item): item is WorkspaceSpaceState => item !== null)
+    : []
+
+  const availableNodeIds = new Set(normalizedNodes.map(node => node.id))
+  const sanitizedSpaces = normalizedSpaces.map(space => ({
+    ...space,
+    nodeIds: space.nodeIds.filter(nodeId => availableNodeIds.has(nodeId)),
+  }))
+  const normalizedActiveSpaceId = typeof activeSpaceId === 'string' ? activeSpaceId : null
+  const resolvedActiveSpaceId =
+    normalizedActiveSpaceId && sanitizedSpaces.some(space => space.id === normalizedActiveSpaceId)
+      ? normalizedActiveSpaceId
+      : null
+
   return {
     id,
     name,
@@ -317,6 +413,8 @@ function ensurePersistedWorkspace(workspace: unknown): PersistedWorkspaceState |
     nodes: normalizedNodes,
     viewport: normalizeWorkspaceViewport(record.viewport),
     isMinimapVisible: normalizeWorkspaceMinimapVisible(record.isMinimapVisible),
+    spaces: sanitizedSpaces,
+    activeSpaceId: resolvedActiveSpaceId,
   }
 }
 
@@ -399,6 +497,21 @@ export function toPersistedState(
         typeof workspace.isMinimapVisible === 'boolean'
           ? workspace.isMinimapVisible
           : DEFAULT_WORKSPACE_MINIMAP_VISIBLE,
+      spaces: workspace.spaces.map(space => ({
+        id: space.id,
+        name: space.name,
+        directoryPath:
+          normalizeOptionalString(space.directoryPath) ??
+          normalizeOptionalString(workspace.path) ??
+          workspace.path,
+        nodeIds: normalizeWorkspaceSpaceNodeIds(space.nodeIds),
+        rect: normalizeWorkspaceSpaceRect(space.rect),
+      })),
+      activeSpaceId:
+        workspace.activeSpaceId &&
+        workspace.spaces.some(space => space.id === workspace.activeSpaceId)
+          ? workspace.activeSpaceId
+          : null,
       nodes: workspace.nodes.map(node => ({
         id: node.id,
         title: node.data.title,

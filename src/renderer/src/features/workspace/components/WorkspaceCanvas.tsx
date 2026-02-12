@@ -6,12 +6,14 @@ import {
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
+  ViewportPortal,
   applyNodeChanges,
   useReactFlow,
   type Edge,
   type Node,
   type NodeChange,
   type NodePositionChange,
+  SelectionMode,
   type Viewport,
   MarkerType,
 } from '@xyflow/react'
@@ -34,6 +36,8 @@ import type {
   TaskPriority,
   TaskRuntimeStatus,
   TerminalNodeData,
+  WorkspaceSpaceRect,
+  WorkspaceSpaceState,
   WorkspaceViewport,
 } from '../types'
 import {
@@ -47,6 +51,10 @@ interface WorkspaceCanvasProps {
   workspacePath: string
   nodes: Node<TerminalNodeData>[]
   onNodesChange: (nodes: Node<TerminalNodeData>[]) => void
+  spaces: WorkspaceSpaceState[]
+  activeSpaceId: string | null
+  onSpacesChange: (spaces: WorkspaceSpaceState[]) => void
+  onActiveSpaceChange: (spaceId: string | null) => void
   viewport: WorkspaceViewport
   isMinimapVisible: boolean
   onViewportChange: (viewport: WorkspaceViewport) => void
@@ -56,11 +64,33 @@ interface WorkspaceCanvasProps {
   focusSequence?: number
 }
 
-interface ContextMenuState {
+interface PaneContextMenuState {
+  kind: 'pane'
   x: number
   y: number
   flowX: number
   flowY: number
+}
+
+interface SelectionContextMenuState {
+  kind: 'selection'
+  x: number
+  y: number
+}
+
+type ContextMenuState = PaneContextMenuState | SelectionContextMenuState
+
+interface SelectionDraftState {
+  startX: number
+  startY: number
+  currentX: number
+  currentY: number
+}
+
+interface EmptySelectionPromptState {
+  x: number
+  y: number
+  rect: WorkspaceSpaceRect
 }
 
 interface AgentLauncherState {
@@ -240,6 +270,10 @@ function WorkspaceCanvasInner({
   workspacePath,
   nodes,
   onNodesChange,
+  spaces,
+  activeSpaceId,
+  onSpacesChange,
+  onActiveSpaceChange,
   viewport,
   isMinimapVisible: persistedMinimapVisible,
   onViewportChange,
@@ -256,12 +290,18 @@ function WorkspaceCanvasInner({
   const [taskDeleteConfirmation, setTaskDeleteConfirmation] =
     useState<TaskDeleteConfirmationState | null>(null)
   const [isMinimapVisible, setIsMinimapVisible] = useState(persistedMinimapVisible)
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([])
+  const [emptySelectionPrompt, setEmptySelectionPrompt] =
+    useState<EmptySelectionPromptState | null>(null)
 
   const reactFlow = useReactFlow<Node<TerminalNodeData>, Edge>()
   const canvasRef = useRef<HTMLDivElement | null>(null)
   const restoredViewportWorkspaceIdRef = useRef<string | null>(null)
 
   const nodesRef = useRef(nodes)
+  const spacesRef = useRef(spaces)
+  const selectedNodeIdsRef = useRef<string[]>([])
+  const selectionDraftRef = useRef<SelectionDraftState | null>(null)
   const closeNodeRef = useRef<(nodeId: string) => Promise<void>>(async () => undefined)
   const resizeNodeRef = useRef<(nodeId: string, desiredSize: Size) => void>(() => undefined)
   const stopAgentNodeRef = useRef<(nodeId: string) => Promise<void>>(async () => undefined)
@@ -297,8 +337,23 @@ function WorkspaceCanvasInner({
   }, [nodes])
 
   useEffect(() => {
+    spacesRef.current = spaces
+  }, [spaces])
+
+  useEffect(() => {
+    selectedNodeIdsRef.current = selectedNodeIds
+  }, [selectedNodeIds])
+
+  useEffect(() => {
     setIsMinimapVisible(persistedMinimapVisible)
   }, [persistedMinimapVisible, workspaceId])
+
+  useEffect(() => {
+    setSelectedNodeIds([])
+    setContextMenu(null)
+    setEmptySelectionPrompt(null)
+    selectionDraftRef.current = null
+  }, [workspaceId])
 
   useEffect(() => {
     if (restoredViewportWorkspaceIdRef.current === workspaceId) {
@@ -1393,29 +1448,409 @@ function WorkspaceCanvasInner({
     [],
   )
 
+  const resolveNodeDirectoryPath = useCallback(
+    (nodeId: string): string => {
+      const node = nodesRef.current.find(item => item.id === nodeId)
+      if (!node) {
+        return workspacePath
+      }
+
+      if (node.data.kind === 'agent') {
+        return node.data.agent?.executionDirectory ?? workspacePath
+      }
+
+      if (node.data.kind === 'task' && node.data.task?.linkedAgentNodeId) {
+        const linkedAgent = nodesRef.current.find(
+          candidate =>
+            candidate.id === node.data.task?.linkedAgentNodeId && candidate.data.kind === 'agent',
+        )
+        if (linkedAgent?.data.agent?.executionDirectory) {
+          return linkedAgent.data.agent.executionDirectory
+        }
+      }
+
+      return workspacePath
+    },
+    [workspacePath],
+  )
+
+  const expandSelectionWithLinkedAgents = useCallback((selectedIds: string[]): string[] => {
+    const expanded = new Set(selectedIds)
+
+    for (const nodeId of selectedIds) {
+      const node = nodesRef.current.find(item => item.id === nodeId)
+      if (!node || node.data.kind !== 'task' || !node.data.task?.linkedAgentNodeId) {
+        continue
+      }
+
+      expanded.add(node.data.task.linkedAgentNodeId)
+    }
+
+    return [...expanded]
+  }, [])
+
+  const validateSelectionForTargetDirectory = useCallback(
+    (selectedIds: string[], targetDirectoryPath: string): string | null => {
+      for (const nodeId of selectedIds) {
+        const node = nodesRef.current.find(item => item.id === nodeId)
+        if (!node) {
+          continue
+        }
+
+        if (node.data.kind === 'agent') {
+          const nodeDirectory = resolveNodeDirectoryPath(node.id)
+          if (nodeDirectory !== targetDirectoryPath) {
+            return isAgentWorking(node.data.status)
+              ? 'Running agents can only move to spaces with the same directory.'
+              : 'Agents cannot be moved to a space with a different directory.'
+          }
+          continue
+        }
+
+        if (node.data.kind !== 'task' || !node.data.task) {
+          continue
+        }
+
+        const linkedAgentNodeId = node.data.task.linkedAgentNodeId
+        if (linkedAgentNodeId) {
+          const linkedAgent = nodesRef.current.find(
+            candidate => candidate.id === linkedAgentNodeId && candidate.data.kind === 'agent',
+          )
+          if (linkedAgent) {
+            const linkedDirectory = resolveNodeDirectoryPath(linkedAgent.id)
+            if (linkedDirectory !== targetDirectoryPath) {
+              return isAgentWorking(linkedAgent.data.status)
+                ? 'Tasks linked to running agents can only move to spaces with the same directory.'
+                : 'Tasks linked to agents in another directory cannot be moved to this space.'
+            }
+          }
+        }
+
+        if (node.data.task.status === 'doing' && targetDirectoryPath !== workspacePath) {
+          return 'Running tasks can only move to spaces with the same directory.'
+        }
+      }
+
+      return null
+    },
+    [resolveNodeDirectoryPath, workspacePath],
+  )
+
+  const clearNodeSelection = useCallback(() => {
+    setNodes(
+      prevNodes => {
+        let hasSelection = false
+        const nextNodes = prevNodes.map(node => {
+          if (!node.selected) {
+            return node
+          }
+
+          hasSelection = true
+          return {
+            ...node,
+            selected: false,
+          }
+        })
+
+        return hasSelection ? nextNodes : prevNodes
+      },
+      { syncLayout: false },
+    )
+    setSelectedNodeIds([])
+  }, [setNodes])
+
+  const createSpace = useCallback(
+    (payload: { nodeIds: string[]; rect: WorkspaceSpaceRect | null }) => {
+      const normalizedNodeIds = expandSelectionWithLinkedAgents(payload.nodeIds).filter(nodeId =>
+        nodesRef.current.some(node => node.id === nodeId),
+      )
+      const targetDirectoryPath = workspacePath
+      const validationError = validateSelectionForTargetDirectory(
+        normalizedNodeIds,
+        targetDirectoryPath,
+      )
+      if (validationError) {
+        window.alert(validationError)
+        return
+      }
+
+      const usedNames = new Set(spacesRef.current.map(space => space.name.toLowerCase()))
+      let nextNumber = spacesRef.current.length + 1
+      let normalizedName = `Space ${nextNumber}`
+      while (usedNames.has(normalizedName.toLowerCase())) {
+        nextNumber += 1
+        normalizedName = `Space ${nextNumber}`
+      }
+
+      const assignedNodeSet = new Set(normalizedNodeIds)
+      const normalizedSpaces = spacesRef.current.map(space => ({
+        ...space,
+        nodeIds: space.nodeIds.filter(nodeId => !assignedNodeSet.has(nodeId)),
+      }))
+
+      const nextSpace: WorkspaceSpaceState = {
+        id: crypto.randomUUID(),
+        name: normalizedName,
+        directoryPath: targetDirectoryPath,
+        nodeIds: normalizedNodeIds,
+        rect: payload.rect,
+      }
+
+      onSpacesChange([...normalizedSpaces, nextSpace])
+      onActiveSpaceChange(nextSpace.id)
+      setContextMenu(null)
+      setEmptySelectionPrompt(null)
+    },
+    [
+      expandSelectionWithLinkedAgents,
+      onActiveSpaceChange,
+      onSpacesChange,
+      validateSelectionForTargetDirectory,
+      workspacePath,
+    ],
+  )
+
+  const moveSelectionToSpace = useCallback(
+    (spaceId: string) => {
+      const targetSpace = spacesRef.current.find(space => space.id === spaceId)
+      if (!targetSpace) {
+        return
+      }
+
+      const selectedIds = selectedNodeIdsRef.current
+      if (selectedIds.length === 0) {
+        return
+      }
+
+      const expandedNodeIds = expandSelectionWithLinkedAgents(selectedIds)
+      const validationError = validateSelectionForTargetDirectory(
+        expandedNodeIds,
+        targetSpace.directoryPath,
+      )
+      if (validationError) {
+        window.alert(validationError)
+        return
+      }
+
+      const movedNodeSet = new Set(expandedNodeIds)
+      const nextSpaces = spacesRef.current.map(space => {
+        const withoutMovedNodes = space.nodeIds.filter(nodeId => !movedNodeSet.has(nodeId))
+
+        if (space.id !== targetSpace.id) {
+          return {
+            ...space,
+            nodeIds: withoutMovedNodes,
+          }
+        }
+
+        return {
+          ...space,
+          nodeIds: [...new Set([...withoutMovedNodes, ...expandedNodeIds])],
+        }
+      })
+
+      onSpacesChange(nextSpaces)
+      onActiveSpaceChange(targetSpace.id)
+      setContextMenu(null)
+    },
+    [
+      expandSelectionWithLinkedAgents,
+      onActiveSpaceChange,
+      onSpacesChange,
+      validateSelectionForTargetDirectory,
+    ],
+  )
+
+  const removeSelectionFromSpaces = useCallback(() => {
+    const selectedIds = selectedNodeIdsRef.current
+    if (selectedIds.length === 0) {
+      return
+    }
+
+    const expandedNodeIds = new Set(expandSelectionWithLinkedAgents(selectedIds))
+    const nextSpaces = spacesRef.current.map(space => ({
+      ...space,
+      nodeIds: space.nodeIds.filter(nodeId => !expandedNodeIds.has(nodeId)),
+    }))
+
+    onSpacesChange(nextSpaces)
+    onActiveSpaceChange(null)
+    setContextMenu(null)
+  }, [expandSelectionWithLinkedAgents, onActiveSpaceChange, onSpacesChange])
+
+  const openSelectionContextMenu = useCallback((x: number, y: number) => {
+    setContextMenu({
+      kind: 'selection',
+      x,
+      y,
+    })
+    setEmptySelectionPrompt(null)
+  }, [])
+
+  const handleSelectionContextMenu = useCallback(
+    (event: React.MouseEvent, selectedNodes: Node<TerminalNodeData>[]) => {
+      event.preventDefault()
+      if (selectedNodes.length === 0) {
+        return
+      }
+
+      openSelectionContextMenu(event.clientX, event.clientY)
+    },
+    [openSelectionContextMenu],
+  )
+
+  const handleNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: Node<TerminalNodeData>) => {
+      if (!selectedNodeIdsRef.current.includes(node.id)) {
+        return
+      }
+
+      event.preventDefault()
+      openSelectionContextMenu(event.clientX, event.clientY)
+    },
+    [openSelectionContextMenu],
+  )
+
   const handlePaneContextMenu = useCallback(
     (event: React.MouseEvent | MouseEvent) => {
       event.preventDefault()
       if (!('clientX' in event)) {
         return
       }
+
+      if (selectedNodeIdsRef.current.length > 0) {
+        openSelectionContextMenu(event.clientX, event.clientY)
+        return
+      }
+
       const flowPosition = reactFlow.screenToFlowPosition({
         x: event.clientX,
         y: event.clientY,
       })
 
       setContextMenu({
+        kind: 'pane',
         x: event.clientX,
         y: event.clientY,
         flowX: flowPosition.x,
         flowY: flowPosition.y,
       })
+      setEmptySelectionPrompt(null)
     },
-    [reactFlow],
+    [openSelectionContextMenu, reactFlow],
   )
 
+  const handleSelectionChange = useCallback(
+    ({ nodes: selected }: { nodes: Node<TerminalNodeData>[] }) => {
+      const selectedIds = selected.map(node => node.id)
+      setSelectedNodeIds(selectedIds)
+      if (selectedIds.length > 0) {
+        setEmptySelectionPrompt(null)
+      }
+    },
+    [],
+  )
+
+  const handleCanvasPointerDownCapture = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      if (event.button !== 0 || !event.shiftKey) {
+        return
+      }
+
+      if (!(event.target instanceof Element) || !event.target.closest('.react-flow__pane')) {
+        return
+      }
+
+      selectionDraftRef.current = {
+        startX: event.clientX,
+        startY: event.clientY,
+        currentX: event.clientX,
+        currentY: event.clientY,
+      }
+      setContextMenu(null)
+      setEmptySelectionPrompt(null)
+    },
+    [],
+  )
+
+  const handleCanvasPointerMoveCapture = useCallback(
+    (event: React.PointerEvent<HTMLDivElement>) => {
+      const draft = selectionDraftRef.current
+      if (!draft) {
+        return
+      }
+
+      draft.currentX = event.clientX
+      draft.currentY = event.clientY
+    },
+    [],
+  )
+
+  const handleCanvasPointerUpCapture = useCallback(() => {
+    const draft = selectionDraftRef.current
+    if (!draft) {
+      return
+    }
+
+    selectionDraftRef.current = null
+    const width = Math.abs(draft.currentX - draft.startX)
+    const height = Math.abs(draft.currentY - draft.startY)
+    if (width < 8 || height < 8) {
+      return
+    }
+
+    window.requestAnimationFrame(() => {
+      const selectedCount = reactFlow.getNodes().filter(node => Boolean(node.selected)).length
+      if (selectedCount > 0) {
+        return
+      }
+
+      const minX = Math.min(draft.startX, draft.currentX)
+      const maxX = Math.max(draft.startX, draft.currentX)
+      const minY = Math.min(draft.startY, draft.currentY)
+      const maxY = Math.max(draft.startY, draft.currentY)
+      const startFlow = reactFlow.screenToFlowPosition({ x: minX, y: minY })
+      const endFlow = reactFlow.screenToFlowPosition({ x: maxX, y: maxY })
+
+      setEmptySelectionPrompt({
+        x: minX + (maxX - minX) / 2,
+        y: minY + (maxY - minY) / 2,
+        rect: {
+          x: startFlow.x,
+          y: startFlow.y,
+          width: Math.max(80, endFlow.x - startFlow.x),
+          height: Math.max(80, endFlow.y - startFlow.y),
+        },
+      })
+    })
+  }, [reactFlow])
+
+  const createSpaceFromSelectedNodes = useCallback(() => {
+    const selectedIds = selectedNodeIdsRef.current
+    if (selectedIds.length === 0) {
+      setContextMenu(null)
+      return
+    }
+
+    createSpace({
+      nodeIds: selectedIds,
+      rect: null,
+    })
+  }, [createSpace])
+
+  const createSpaceFromEmptySelection = useCallback(() => {
+    if (!emptySelectionPrompt) {
+      return
+    }
+
+    createSpace({
+      nodeIds: [],
+      rect: emptySelectionPrompt.rect,
+    })
+  }, [createSpace, emptySelectionPrompt])
+
   const createTerminalNode = useCallback(async () => {
-    if (!contextMenu) {
+    if (!contextMenu || contextMenu.kind !== 'pane') {
       return
     }
 
@@ -1441,7 +1876,7 @@ function WorkspaceCanvasInner({
   }, [contextMenu, createNodeForSession, workspacePath])
 
   const openTaskCreator = useCallback(() => {
-    if (!contextMenu) {
+    if (!contextMenu || contextMenu.kind !== 'pane') {
       return
     }
 
@@ -2029,7 +2464,7 @@ function WorkspaceCanvasInner({
   }, [openTaskAssigner])
 
   const openAgentLauncher = useCallback(() => {
-    if (!contextMenu) {
+    if (!contextMenu || contextMenu.kind !== 'pane') {
       return
     }
 
@@ -2417,15 +2852,77 @@ function WorkspaceCanvasInner({
       })
   }, [nodes])
 
+  const spaceVisuals = useMemo(() => {
+    const nodeById = new Map(nodes.map(node => [node.id, node]))
+
+    return spaces
+      .map(space => {
+        let rect = space.rect
+
+        if (!rect) {
+          const ownedNodes = space.nodeIds
+            .map(nodeId => nodeById.get(nodeId))
+            .filter((node): node is Node<TerminalNodeData> => Boolean(node))
+
+          if (ownedNodes.length === 0) {
+            return null
+          }
+
+          const minX = Math.min(...ownedNodes.map(node => node.position.x))
+          const minY = Math.min(...ownedNodes.map(node => node.position.y))
+          const maxX = Math.max(...ownedNodes.map(node => node.position.x + node.data.width))
+          const maxY = Math.max(...ownedNodes.map(node => node.position.y + node.data.height))
+
+          rect = {
+            x: minX - 24,
+            y: minY - 24,
+            width: Math.max(120, maxX - minX + 48),
+            height: Math.max(100, maxY - minY + 48),
+          }
+        }
+
+        return {
+          id: space.id,
+          name: space.name,
+          rect,
+        }
+      })
+      .filter(
+        (
+          item,
+        ): item is {
+          id: string
+          name: string
+          rect: WorkspaceSpaceRect
+        } => item !== null,
+      )
+  }, [nodes, spaces])
+
   return (
-    <div ref={canvasRef} className="workspace-canvas" onClick={() => setContextMenu(null)}>
+    <div
+      ref={canvasRef}
+      className="workspace-canvas"
+      onClick={() => {
+        setContextMenu(null)
+        setEmptySelectionPrompt(null)
+      }}
+      onPointerDownCapture={handleCanvasPointerDownCapture}
+      onPointerMoveCapture={handleCanvasPointerMoveCapture}
+      onPointerUpCapture={handleCanvasPointerUpCapture}
+    >
       <ReactFlow<Node<TerminalNodeData>, Edge>
         nodes={nodes}
         edges={taskAgentEdges}
         nodeTypes={nodeTypes}
         onNodesChange={applyChanges}
         onPaneContextMenu={handlePaneContextMenu}
+        onNodeContextMenu={handleNodeContextMenu}
+        onSelectionContextMenu={handleSelectionContextMenu}
+        onSelectionChange={handleSelectionChange}
         onMoveEnd={handleViewportMoveEnd}
+        selectionMode={SelectionMode.Partial}
+        selectionKeyCode="Shift"
+        multiSelectionKeyCode="Shift"
         nodesDraggable
         elementsSelectable
         zoomOnScroll
@@ -2438,6 +2935,29 @@ function WorkspaceCanvasInner({
         proOptions={{ hideAttribution: true }}
       >
         <Background variant={BackgroundVariant.Dots} size={1} gap={24} color="#20324f" />
+        <ViewportPortal>
+          {spaceVisuals.map(space => (
+            <div
+              key={space.id}
+              className={`workspace-space-region${space.id === activeSpaceId ? ' workspace-space-region--active' : ''}`}
+              style={{
+                transform: `translate(${space.rect.x}px, ${space.rect.y}px)`,
+                width: space.rect.width,
+                height: space.rect.height,
+              }}
+            >
+              <span className="workspace-space-region__label">{space.name}</span>
+            </div>
+          ))}
+        </ViewportPortal>
+
+        {selectedNodeIds.length > 0 ? (
+          <div className="workspace-selection-hint">
+            Selected {selectedNodeIds.length} node{selectedNodeIds.length > 1 ? 's' : ''}.
+            Right-click to manage workspace grouping.
+          </div>
+        ) : null}
+
         <div
           className={`workspace-canvas__minimap-dock${isMinimapVisible ? ' workspace-canvas__minimap-dock--expanded' : ''}`}
         >
@@ -2474,6 +2994,68 @@ function WorkspaceCanvasInner({
         <Controls className="workspace-canvas__controls" showInteractive={false} />
       </ReactFlow>
 
+      {spaces.length > 0 ? (
+        <div
+          className="workspace-space-switcher"
+          onClick={event => {
+            event.stopPropagation()
+          }}
+        >
+          <button
+            type="button"
+            className={`workspace-space-switcher__item${activeSpaceId === null ? ' workspace-space-switcher__item--active' : ''}`}
+            data-testid="workspace-space-switch-all"
+            onClick={() => {
+              onActiveSpaceChange(null)
+            }}
+          >
+            All
+          </button>
+          {spaces.map(space => (
+            <button
+              type="button"
+              key={space.id}
+              className={`workspace-space-switcher__item${space.id === activeSpaceId ? ' workspace-space-switcher__item--active' : ''}`}
+              data-testid={`workspace-space-switch-${space.id}`}
+              onClick={() => {
+                onActiveSpaceChange(space.id)
+              }}
+            >
+              {space.name}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {emptySelectionPrompt ? (
+        <div
+          className="workspace-empty-selection-prompt"
+          style={{ left: emptySelectionPrompt.x, top: emptySelectionPrompt.y }}
+          onClick={event => {
+            event.stopPropagation()
+          }}
+        >
+          <button
+            type="button"
+            data-testid="workspace-empty-selection-create-space"
+            onClick={() => {
+              createSpaceFromEmptySelection()
+            }}
+          >
+            Create Workspace
+          </button>
+          <button
+            type="button"
+            data-testid="workspace-empty-selection-cancel"
+            onClick={() => {
+              setEmptySelectionPrompt(null)
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      ) : null}
+
       {contextMenu ? (
         <div
           className="workspace-context-menu"
@@ -2482,33 +3064,81 @@ function WorkspaceCanvasInner({
             event.stopPropagation()
           }}
         >
-          <button
-            type="button"
-            data-testid="workspace-context-new-terminal"
-            onClick={() => {
-              void createTerminalNode()
-            }}
-          >
-            New Terminal
-          </button>
-          <button
-            type="button"
-            data-testid="workspace-context-new-task"
-            onClick={() => {
-              openTaskCreator()
-            }}
-          >
-            New Task
-          </button>
-          <button
-            type="button"
-            data-testid="workspace-context-run-default-agent"
-            onClick={() => {
-              openAgentLauncher()
-            }}
-          >
-            Run Agent
-          </button>
+          {contextMenu.kind === 'pane' ? (
+            <>
+              <button
+                type="button"
+                data-testid="workspace-context-new-terminal"
+                onClick={() => {
+                  void createTerminalNode()
+                }}
+              >
+                New Terminal
+              </button>
+              <button
+                type="button"
+                data-testid="workspace-context-new-task"
+                onClick={() => {
+                  openTaskCreator()
+                }}
+              >
+                New Task
+              </button>
+              <button
+                type="button"
+                data-testid="workspace-context-run-default-agent"
+                onClick={() => {
+                  openAgentLauncher()
+                }}
+              >
+                Run Agent
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                data-testid="workspace-selection-create-space"
+                onClick={() => {
+                  createSpaceFromSelectedNodes()
+                }}
+              >
+                Create Workspace with Selected
+              </button>
+              {spaces.map(space => (
+                <button
+                  type="button"
+                  key={space.id}
+                  data-testid={`workspace-selection-move-space-${space.id}`}
+                  onClick={() => {
+                    moveSelectionToSpace(space.id)
+                  }}
+                >
+                  Move to {space.name}
+                  {space.id === activeSpaceId ? ' (Active)' : ''}
+                </button>
+              ))}
+              <button
+                type="button"
+                data-testid="workspace-selection-remove-space"
+                onClick={() => {
+                  removeSelectionFromSpaces()
+                }}
+              >
+                Remove from Workspace
+              </button>
+              <button
+                type="button"
+                data-testid="workspace-selection-clear"
+                onClick={() => {
+                  clearNodeSelection()
+                  setContextMenu(null)
+                }}
+              >
+                Clear Selection
+              </button>
+            </>
+          )}
         </div>
       ) : null}
 
@@ -3190,7 +3820,7 @@ function WorkspaceCanvasInner({
                       )
                     }}
                   />
-                  <span>Workspace Root</span>
+                  <span>Project Root</span>
                 </label>
 
                 <label>

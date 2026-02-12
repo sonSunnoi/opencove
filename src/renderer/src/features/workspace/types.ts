@@ -63,6 +63,8 @@ export interface WorkspaceState {
   nodes: Node<TerminalNodeData>[]
   viewport: WorkspaceViewport
   isMinimapVisible: boolean
+  spaces: WorkspaceSpaceState[]
+  activeSpaceId: string | null
 }
 
 export interface PersistedWorkspaceState {
@@ -72,6 +74,23 @@ export interface PersistedWorkspaceState {
   nodes: PersistedTerminalNode[]
   viewport: WorkspaceViewport
   isMinimapVisible: boolean
+  spaces: WorkspaceSpaceState[]
+  activeSpaceId: string | null
+}
+
+export interface WorkspaceSpaceRect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+export interface WorkspaceSpaceState {
+  id: string
+  name: string
+  directoryPath: string
+  nodeIds: string[]
+  rect: WorkspaceSpaceRect | null
 }
 
 export interface PersistedTerminalNode {

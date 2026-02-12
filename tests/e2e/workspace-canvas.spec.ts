@@ -62,6 +62,19 @@ interface SeedWorkspace {
   name: string
   path: string
   nodes: SeedNode[]
+  spaces?: Array<{
+    id: string
+    name: string
+    directoryPath: string
+    nodeIds: string[]
+    rect?: {
+      x: number
+      y: number
+      width: number
+      height: number
+    } | null
+  }>
+  activeSpaceId?: string | null
 }
 
 async function launchApp(): Promise<{ electronApp: ElectronApplication; window: Page }> {
@@ -186,6 +199,8 @@ async function clearAndSeedWorkspace(
   nodes: SeedNode[],
   options?: {
     settings?: unknown
+    spaces?: SeedWorkspace['spaces']
+    activeSpaceId?: string | null
   },
 ): Promise<void> {
   await seedWorkspaceState(window, {
@@ -196,6 +211,8 @@ async function clearAndSeedWorkspace(
         name: path.basename(testWorkspacePath),
         path: testWorkspacePath,
         nodes,
+        ...(options?.spaces ? { spaces: options.spaces } : {}),
+        ...(options && 'activeSpaceId' in options ? { activeSpaceId: options.activeSpaceId } : {}),
       },
     ],
     settings: options?.settings,
@@ -1062,6 +1079,145 @@ test.describe('Workspace Canvas Interactions', () => {
         '[cove-test-agent] codex new',
       )
       await expect(window.locator('.workspace-agent-item')).toHaveCount(1)
+    } finally {
+      await electronApp.close()
+    }
+  })
+
+  test('creates workspace from shift box selection on empty region', async () => {
+    const { electronApp, window } = await launchApp()
+
+    try {
+      await clearAndSeedWorkspace(window, [])
+
+      const pane = window.locator('.workspace-canvas .react-flow__pane')
+      await expect(pane).toBeVisible()
+      const paneBox = await pane.boundingBox()
+      if (!paneBox) {
+        throw new Error('workspace pane bounding box unavailable')
+      }
+
+      const startX = paneBox.x + 140
+      const startY = paneBox.y + 120
+
+      await window.keyboard.down('Shift')
+      await window.mouse.move(startX, startY)
+      await window.mouse.down()
+      await window.mouse.move(startX + 220, startY + 170, { steps: 8 })
+      await window.mouse.up()
+      await window.keyboard.up('Shift')
+
+      const createButton = window.locator('[data-testid="workspace-empty-selection-create-space"]')
+      await expect(createButton).toBeVisible()
+
+      await createButton.click()
+      await expect(window.locator('.workspace-sidebar__space-label')).toContainText('Space')
+    } finally {
+      await electronApp.close()
+    }
+  })
+
+  test('blocks moving selected agent to workspace with different directory', async () => {
+    const { electronApp, window } = await launchApp()
+
+    try {
+      await clearAndSeedWorkspace(
+        window,
+        [
+          {
+            id: 'space-agent-node',
+            title: 'codex · gpt-5.2-codex',
+            position: { x: 260, y: 180 },
+            width: 500,
+            height: 320,
+            kind: 'agent',
+            status: 'running',
+            startedAt: new Date().toISOString(),
+            endedAt: null,
+            exitCode: null,
+            lastError: null,
+            scrollback: '[cove-test-agent] codex new gpt-5.2-codex\n',
+            agent: {
+              provider: 'codex',
+              prompt: 'Implement API retries',
+              model: 'gpt-5.2-codex',
+              effectiveModel: 'gpt-5.2-codex',
+              launchMode: 'new',
+              resumeSessionId: null,
+              executionDirectory: testWorkspacePath,
+              directoryMode: 'workspace',
+              customDirectory: null,
+              shouldCreateDirectory: false,
+            },
+            task: null,
+          },
+        ],
+        {
+          spaces: [
+            {
+              id: 'space-root',
+              name: 'Root Scope',
+              directoryPath: testWorkspacePath,
+              nodeIds: [],
+              rect: null,
+            },
+            {
+              id: 'space-diff',
+              name: 'Worktree Scope',
+              directoryPath: `${testWorkspacePath}/.cove/worktrees/demo`,
+              nodeIds: [],
+              rect: null,
+            },
+          ],
+        },
+      )
+
+      const agentNode = window.locator('.terminal-node').first()
+      await expect(agentNode).toBeVisible()
+      await agentNode.click()
+      await agentNode.click({ button: 'right' })
+
+      const moveButton = window.locator('[data-testid="workspace-selection-move-space-space-diff"]')
+      await expect(moveButton).toBeVisible()
+
+      const alertPromise = window.waitForEvent('dialog').then(async dialog => {
+        expect(dialog.type()).toBe('alert')
+        const message = dialog.message()
+        await dialog.accept()
+        return message
+      })
+
+      await moveButton.click()
+      const alertMessage = await alertPromise
+      expect(alertMessage).toContain('directory')
+
+      const movedToDifferentSpace = await window.evaluate(
+        ({ key, nodeId, targetSpaceId }) => {
+          const raw = window.localStorage.getItem(key)
+          if (!raw) {
+            return false
+          }
+
+          const parsed = JSON.parse(raw) as {
+            workspaces?: Array<{
+              spaces?: Array<{
+                id?: string
+                nodeIds?: string[]
+              }>
+            }>
+          }
+          const spaces = parsed.workspaces?.[0]?.spaces ?? []
+          const targetSpace = spaces.find(space => space.id === targetSpaceId)
+          return Array.isArray(targetSpace?.nodeIds) ? targetSpace.nodeIds.includes(nodeId) : false
+        },
+        {
+          key: storageKey,
+          nodeId: 'space-agent-node',
+          targetSpaceId: 'space-diff',
+        },
+      )
+
+      expect(movedToDifferentSpace).toBe(false)
     } finally {
       await electronApp.close()
     }
