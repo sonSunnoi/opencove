@@ -241,8 +241,8 @@ export function WorkspaceCanvasView({
         onSelectionChange={onSelectionChange}
         onMoveEnd={onMoveEnd}
         selectionMode={SelectionMode.Partial}
-        selectionKeyCode="Shift"
-        multiSelectionKeyCode="Shift"
+        selectionKeyCode={null}
+        multiSelectionKeyCode={null}
         selectionOnDrag={isTrackpadCanvasMode || isShiftPressed}
         nodesDraggable
         elementsSelectable

@@ -174,6 +174,26 @@ export function TerminalNode({
 
     let disposeXtermPasteGuards = () => undefined
     const ptyWriteQueue = createPtyWriteQueue(data => window.coveApi.pty.write({ sessionId, data }))
+    terminal.attachCustomKeyEventHandler(event => {
+      if (
+        event.key !== 'Enter' ||
+        !event.shiftKey ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey
+      ) {
+        return true
+      }
+
+      if (event.type === 'keydown') {
+        // Align Shift+Enter with Codex/Claude terminal fallback:
+        // send Escape+Enter so apps can treat it as "insert newline".
+        ptyWriteQueue.enqueue('\u001b\r')
+        ptyWriteQueue.flush()
+      }
+
+      return false
+    })
 
     if (containerRef.current) {
       terminal.open(containerRef.current)
