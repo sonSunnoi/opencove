@@ -1,6 +1,8 @@
 import { useCallback } from 'react'
 import type { Edge, Node, ReactFlowInstance } from '@xyflow/react'
 import type { TerminalNodeData, WorkspaceSpaceRect, WorkspaceSpaceState } from '../../../types'
+import { expandSpaceToFitOwnedNodesAndPushAway } from '../../../utils/spaceAutoResize'
+import { pushAwayLayout, type LayoutItem } from '../../../utils/spaceLayout'
 import { sanitizeSpaces } from '../helpers'
 
 type SetNodes = (
@@ -226,7 +228,7 @@ function resolveNearestNonOverlappingDropOffset({
   baseDy: number
   targetSpaceRect: WorkspaceSpaceRect | null
   forbiddenSpaceRects: WorkspaceSpaceRect[]
-}): { dx: number; dy: number } {
+}): { dx: number; dy: number; canPlace: boolean } {
   const otherRects: Rect[] = otherNodes.map(node => ({
     x: node.position.x,
     y: node.position.y,
@@ -295,7 +297,7 @@ function resolveNearestNonOverlappingDropOffset({
 
   const initial = { x: 0, y: 0 }
   if (candidateIsValid(initial)) {
-    return { dx: 0, dy: 0 }
+    return { dx: 0, dy: 0, canPlace: true }
   }
 
   for (let radius = 1; radius <= MAX_SCAN_RADIUS; radius += 1) {
@@ -305,11 +307,53 @@ function resolveNearestNonOverlappingDropOffset({
         continue
       }
 
-      return { dx: offset.x, dy: offset.y }
+      return { dx: offset.x, dy: offset.y, canPlace: true }
     }
   }
 
-  return { dx: 0, dy: 0 }
+  return { dx: 0, dy: 0, canPlace: false }
+}
+
+function computePushedPositionsToClearPinnedNodes({
+  nodes,
+  pinnedNodeIds,
+}: {
+  nodes: Array<Node<TerminalNodeData>>
+  pinnedNodeIds: string[]
+}): Map<string, { x: number; y: number }> {
+  if (nodes.length === 0 || pinnedNodeIds.length === 0) {
+    return new Map()
+  }
+
+  const items: LayoutItem[] = nodes.map(node => ({
+    id: node.id,
+    kind: 'node',
+    groupId: node.id,
+    rect: {
+      x: node.position.x - WINDOW_GAP_PX,
+      y: node.position.y - WINDOW_GAP_PX,
+      width: node.data.width + WINDOW_GAP_PX * 2,
+      height: node.data.height + WINDOW_GAP_PX * 2,
+    },
+  }))
+
+  const pushed = pushAwayLayout({
+    items,
+    pinnedGroupIds: pinnedNodeIds,
+    sourceGroupIds: pinnedNodeIds,
+    directions: ['x+'],
+    gap: 0,
+  })
+
+  return new Map(
+    pushed.map(item => [
+      item.id,
+      {
+        x: item.rect.x + WINDOW_GAP_PX,
+        y: item.rect.y + WINDOW_GAP_PX,
+      },
+    ]),
+  )
 }
 
 export function useWorkspaceCanvasSpaceOwnership({
@@ -483,78 +527,166 @@ export function useWorkspaceCanvasSpaceOwnership({
         onSpacesChange(nextSpaces)
       }
 
+      let shouldExpandCrowdedSpace = false
+      let resolvedRects: Array<{ id: string; rect: WorkspaceSpaceRect }> | null = null
+
       setNodes(prevNodes => {
-          const dragged = prevNodes.filter(node => nodeIdSet.has(node.id))
-          if (dragged.length === 0) {
-            return prevNodes
-          }
+        const dragged = prevNodes.filter(node => nodeIdSet.has(node.id))
+        if (dragged.length === 0) {
+          return prevNodes
+        }
 
-          const dropRect = computeBoundingRect(dragged)
-          const dropSpaceRect = targetSpace?.rect ?? null
+        const dropRect = computeBoundingRect(dragged)
+        const dropSpaceRect = targetSpace?.rect ?? null
 
-          const { dx: baseDx, dy: baseDy } =
-            dropRect && dropSpaceRect
-              ? resolveDeltaToKeepRectInsideRect(dropRect, dropSpaceRect, 0)
-              : dropRect
-                ? resolveDeltaToKeepRectOutsideRects(
-                    dropRect,
-                    spacesRef.current
-                      .map(space => space.rect)
-                      .filter((rect): rect is WorkspaceSpaceRect => Boolean(rect))
-                      .map(rect => inflateRect(rect, 0)),
-                  )
-                : { dx: 0, dy: 0 }
+        const { dx: baseDx, dy: baseDy } =
+          dropRect && dropSpaceRect
+            ? resolveDeltaToKeepRectInsideRect(dropRect, dropSpaceRect, 0)
+            : dropRect
+              ? resolveDeltaToKeepRectOutsideRects(
+                  dropRect,
+                  spacesRef.current
+                    .map(space => space.rect)
+                    .filter((rect): rect is WorkspaceSpaceRect => Boolean(rect))
+                    .map(rect => inflateRect(rect, 0)),
+                )
+              : { dx: 0, dy: 0 }
 
-          const others = prevNodes.filter(node => !nodeIdSet.has(node.id))
+        const others = prevNodes.filter(node => !nodeIdSet.has(node.id))
 
-          const forbiddenSpaceRects = dropSpaceRect
-            ? []
-            : spacesRef.current
-                .map(space => space.rect)
-                .filter((rect): rect is WorkspaceSpaceRect => Boolean(rect))
+        const forbiddenSpaceRects = dropSpaceRect
+          ? []
+          : spacesRef.current
+              .map(space => space.rect)
+              .filter((rect): rect is WorkspaceSpaceRect => Boolean(rect))
 
-          const { dx: extraDx, dy: extraDy } = resolveNearestNonOverlappingDropOffset({
-            draggedNodes: dragged,
-            otherNodes: others,
-            baseDx,
-            baseDy,
-            targetSpaceRect: dropSpaceRect,
-            forbiddenSpaceRects,
-          })
+        const { dx: extraDx, dy: extraDy, canPlace } = resolveNearestNonOverlappingDropOffset({
+          draggedNodes: dragged,
+          otherNodes: others,
+          baseDx,
+          baseDy,
+          targetSpaceRect: dropSpaceRect,
+          forbiddenSpaceRects,
+        })
 
+        if (canPlace) {
           const dx = baseDx + extraDx
           const dy = baseDy + extraDy
-
-          if (dx === 0 && dy === 0) {
-            return prevNodes
-          }
-
-          let hasChanged = false
 
           const nextNodes = prevNodes.map(node => {
             if (!nodeIdSet.has(node.id)) {
               return node
             }
 
-            const nextX = node.position.x + dx
-            const nextY = node.position.y + dy
-
-            if (node.position.x === nextX && node.position.y === nextY) {
-              return node
-            }
-
-            hasChanged = true
             return {
               ...node,
               position: {
-                x: nextX,
-                y: nextY,
+                x: node.position.x + dx,
+                y: node.position.y + dy,
               },
             }
           })
 
-          return hasChanged ? nextNodes : prevNodes
+          resolvedRects = nextNodes.map(node => ({
+            id: node.id,
+            rect: {
+              x: node.position.x,
+              y: node.position.y,
+              width: node.data.width,
+              height: node.data.height,
+            },
+          }))
+
+          return dx === 0 && dy === 0 ? prevNodes : nextNodes
+        }
+
+        shouldExpandCrowdedSpace = Boolean(dropSpaceRect && targetSpaceId)
+
+        const clampedNodes = prevNodes.map(node => {
+          if (!nodeIdSet.has(node.id)) {
+            return node
+          }
+
+          return {
+            ...node,
+            position: {
+              x: node.position.x + baseDx,
+              y: node.position.y + baseDy,
+            },
+          }
         })
+
+        const nextPositionByNodeId = computePushedPositionsToClearPinnedNodes({
+          nodes: clampedNodes,
+          pinnedNodeIds: nodeIds,
+        })
+
+        const nextNodes = clampedNodes.map(node => {
+          const nextPosition = nextPositionByNodeId.get(node.id)
+          if (!nextPosition) {
+            return node
+          }
+
+          if (node.position.x === nextPosition.x && node.position.y === nextPosition.y) {
+            return node
+          }
+
+          return {
+            ...node,
+            position: nextPosition,
+          }
+        })
+
+        resolvedRects = nextNodes.map(node => ({
+          id: node.id,
+          rect: {
+            x: node.position.x,
+            y: node.position.y,
+            width: node.data.width,
+            height: node.data.height,
+          },
+        }))
+
+        return nextNodes
+      })
+
+      if (shouldExpandCrowdedSpace && targetSpaceId && resolvedRects) {
+        const { spaces: pushedSpaces, nodePositionById } = expandSpaceToFitOwnedNodesAndPushAway({
+          targetSpaceId,
+          spaces: nextSpaces,
+          nodeRects: resolvedRects,
+          gap: 24,
+        })
+
+        if (nodePositionById.size > 0) {
+          setNodes(
+            prevNodes => {
+              let hasChanged = false
+              const nextNodes = prevNodes.map(node => {
+                const nextPosition = nodePositionById.get(node.id)
+                if (!nextPosition) {
+                  return node
+                }
+
+                if (node.position.x === nextPosition.x && node.position.y === nextPosition.y) {
+                  return node
+                }
+
+                hasChanged = true
+                return {
+                  ...node,
+                  position: nextPosition,
+                }
+              })
+
+              return hasChanged ? nextNodes : prevNodes
+            },
+            { syncLayout: false },
+          )
+        }
+
+        onSpacesChange(pushedSpaces)
+      }
 
       applyDirectoryExpectation(nodeIds, targetSpace)
       if (hasSpaceChange || nodeIds.length > 0) {
