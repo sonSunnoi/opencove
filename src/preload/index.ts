@@ -16,6 +16,8 @@ import type {
   ListAgentModelsInput,
   ListAgentModelsResult,
   PersistWriteResult,
+  ReadAppStateResult,
+  ReadNodeScrollbackInput,
   ResizeTerminalInput,
   RemoveGitWorktreeInput,
   SnapshotTerminalInput,
@@ -29,6 +31,8 @@ import type {
   TerminalDoneEvent,
   TerminalExitEvent,
   WorkspaceDirectory,
+  WriteAppStateInput,
+  WriteNodeScrollbackInput,
   WriteWorkspaceStateRawInput,
   WriteTerminalInput,
 } from '../shared/types/api'
@@ -45,6 +49,14 @@ const coveApi = {
       ipcRenderer.invoke(IPC_CHANNELS.persistenceReadWorkspaceStateRaw),
     writeWorkspaceStateRaw: (payload: WriteWorkspaceStateRawInput): Promise<PersistWriteResult> =>
       ipcRenderer.invoke(IPC_CHANNELS.persistenceWriteWorkspaceStateRaw, payload),
+    readAppState: (): Promise<ReadAppStateResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.persistenceReadAppState),
+    writeAppState: (payload: WriteAppStateInput): Promise<PersistWriteResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.persistenceWriteAppState, payload),
+    readNodeScrollback: (payload: ReadNodeScrollbackInput): Promise<string | null> =>
+      ipcRenderer.invoke(IPC_CHANNELS.persistenceReadNodeScrollback, payload),
+    writeNodeScrollback: (payload: WriteNodeScrollbackInput): Promise<PersistWriteResult> =>
+      ipcRenderer.invoke(IPC_CHANNELS.persistenceWriteNodeScrollback, payload),
   },
   workspace: {
     selectDirectory: (): Promise<WorkspaceDirectory | null> =>

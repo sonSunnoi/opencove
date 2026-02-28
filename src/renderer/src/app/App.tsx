@@ -1,11 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo } from 'react'
 import { SettingsPanel } from '../features/settings/components/SettingsPanel'
-import {
-  AGENT_PROVIDER_LABEL,
-  DEFAULT_AGENT_SETTINGS,
-  resolveAgentModel,
-  type AgentSettings,
-} from '../features/settings/agentConfig'
+import { AGENT_PROVIDER_LABEL, resolveAgentModel } from '../features/settings/agentConfig'
 import { WorkspaceCanvas } from '../features/workspace/components/WorkspaceCanvas'
 import type { WorkspaceViewport, WorkspaceState } from '../features/workspace/types'
 import { DEFAULT_WORKSPACE_MINIMAP_VISIBLE } from '../features/workspace/types'
@@ -17,19 +12,27 @@ import { useHydrateAppState } from './hooks/useHydrateAppState'
 import { usePersistedAppState } from './hooks/usePersistedAppState'
 import { useProjectContextMenuDismiss } from './hooks/useProjectContextMenuDismiss'
 import { useProviderModelCatalog } from './hooks/useProviderModelCatalog'
-import type { FocusRequest, ProjectContextMenuState, ProjectDeleteConfirmationState } from './types'
+import type { ProjectContextMenuState } from './types'
+import { useAppStore } from './store/useAppStore'
 import { createDefaultWorkspaceViewport, sanitizeWorkspaceSpaces } from './utils/workspaceSpaces'
 
 export default function App(): React.JSX.Element {
-  const [workspaces, setWorkspaces] = useState<WorkspaceState[]>([])
-  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null)
-  const [projectContextMenu, setProjectContextMenu] = useState<ProjectContextMenuState | null>(null)
-  const [projectDeleteConfirmation, setProjectDeleteConfirmation] =
-    useState<ProjectDeleteConfirmationState | null>(null)
-  const [isRemovingProject, setIsRemovingProject] = useState(false)
-  const [agentSettings, setAgentSettings] = useState<AgentSettings>(DEFAULT_AGENT_SETTINGS)
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
-  const [focusRequest, setFocusRequest] = useState<FocusRequest | null>(null)
+  const {
+    workspaces,
+    activeWorkspaceId,
+    projectContextMenu,
+    projectDeleteConfirmation,
+    isRemovingProject,
+    agentSettings,
+    isSettingsOpen,
+    focusRequest,
+    setWorkspaces,
+    setActiveWorkspaceId,
+    setProjectContextMenu,
+    setProjectDeleteConfirmation,
+    setAgentSettings,
+    setIsSettingsOpen,
+  } = useAppStore()
 
   const { isHydrated } = useHydrateAppState({
     setAgentSettings,
@@ -41,29 +44,16 @@ export default function App(): React.JSX.Element {
     isSettingsOpen,
   })
 
-  const workspacesRef = useRef(workspaces)
-  const activeWorkspaceIdRef = useRef(activeWorkspaceId)
-  const agentSettingsRef = useRef(agentSettings)
-
-  workspacesRef.current = workspaces
-  activeWorkspaceIdRef.current = activeWorkspaceId
-  agentSettingsRef.current = agentSettings
-
   useEffect(() => {
     const root = document.documentElement
     const uiFontScale = (agentSettings.uiFontSize / 16).toFixed(2)
     root.style.setProperty('--cove-ui-font-scale', uiFontScale)
   }, [agentSettings.uiFontSize])
 
-  const producePersistedState = useCallback(
-    () =>
-      toPersistedState(
-        workspacesRef.current,
-        activeWorkspaceIdRef.current,
-        agentSettingsRef.current,
-      ),
-    [],
-  )
+  const producePersistedState = useCallback(() => {
+    const state = useAppStore.getState()
+    return toPersistedState(state.workspaces, state.activeWorkspaceId, state.agentSettings)
+  }, [])
 
   const { persistNotice, requestPersistFlush, flushPersistNow } = usePersistedAppState({
     workspaces,
@@ -88,9 +78,10 @@ export default function App(): React.JSX.Element {
       return
     }
 
-    const existing = workspacesRef.current.find(workspace => workspace.path === selected.path)
+    const store = useAppStore.getState()
+    const existing = store.workspaces.find(workspace => workspace.path === selected.path)
     if (existing) {
-      setActiveWorkspaceId(existing.id)
+      store.setActiveWorkspaceId(existing.id)
       return
     }
 
@@ -104,172 +95,163 @@ export default function App(): React.JSX.Element {
       activeSpaceId: null,
     }
 
-    setWorkspaces(prev => [...prev, nextWorkspace])
-    setActiveWorkspaceId(nextWorkspace.id)
-    setFocusRequest(null)
+    store.setWorkspaces(prev => [...prev, nextWorkspace])
+    store.setActiveWorkspaceId(nextWorkspace.id)
+    store.setFocusRequest(null)
   }, [])
 
-  const handleWorkspaceNodesChange = useCallback(
-    (nodes: WorkspaceState['nodes']): void => {
-      if (!activeWorkspace) {
-        return
-      }
+  const handleWorkspaceNodesChange = useCallback((nodes: WorkspaceState['nodes']): void => {
+    const { activeWorkspaceId, setWorkspaces } = useAppStore.getState()
+    if (!activeWorkspaceId) {
+      return
+    }
 
-      setWorkspaces(prev =>
-        prev.map(workspace => {
-          if (workspace.id !== activeWorkspace.id) {
-            return workspace
-          }
+    setWorkspaces(prev =>
+      prev.map(workspace => {
+        if (workspace.id !== activeWorkspaceId) {
+          return workspace
+        }
 
-          const nodeIds = new Set(nodes.map(node => node.id))
-          const nextSpaces = sanitizeWorkspaceSpaces(
-            workspace.spaces.map(space => ({
-              ...space,
-              nodeIds: space.nodeIds.filter(nodeId => nodeIds.has(nodeId)),
-            })),
-          )
-          const hasActiveSpace =
-            workspace.activeSpaceId !== null &&
-            nextSpaces.some(space => space.id === workspace.activeSpaceId)
+        const nodeIds = new Set(nodes.map(node => node.id))
+        const nextSpaces = sanitizeWorkspaceSpaces(
+          workspace.spaces.map(space => ({
+            ...space,
+            nodeIds: space.nodeIds.filter(nodeId => nodeIds.has(nodeId)),
+          })),
+        )
+        const hasActiveSpace =
+          workspace.activeSpaceId !== null &&
+          nextSpaces.some(space => space.id === workspace.activeSpaceId)
 
-          return {
-            ...workspace,
-            nodes,
-            spaces: nextSpaces,
-            activeSpaceId: hasActiveSpace ? workspace.activeSpaceId : null,
-          }
-        }),
-      )
-    },
-    [activeWorkspace],
-  )
+        return {
+          ...workspace,
+          nodes,
+          spaces: nextSpaces,
+          activeSpaceId: hasActiveSpace ? workspace.activeSpaceId : null,
+        }
+      }),
+    )
+  }, [])
 
-  const handleWorkspaceViewportChange = useCallback(
-    (viewport: WorkspaceViewport): void => {
-      if (!activeWorkspace) {
-        return
-      }
+  const handleWorkspaceViewportChange = useCallback((viewport: WorkspaceViewport): void => {
+    const { activeWorkspaceId, setWorkspaces } = useAppStore.getState()
+    if (!activeWorkspaceId) {
+      return
+    }
 
-      setWorkspaces(previous =>
-        previous.map(workspace => {
-          if (workspace.id !== activeWorkspace.id) {
-            return workspace
-          }
+    setWorkspaces(previous =>
+      previous.map(workspace => {
+        if (workspace.id !== activeWorkspaceId) {
+          return workspace
+        }
 
-          if (
-            workspace.viewport.x === viewport.x &&
-            workspace.viewport.y === viewport.y &&
-            workspace.viewport.zoom === viewport.zoom
-          ) {
-            return workspace
-          }
+        if (
+          workspace.viewport.x === viewport.x &&
+          workspace.viewport.y === viewport.y &&
+          workspace.viewport.zoom === viewport.zoom
+        ) {
+          return workspace
+        }
 
-          return {
-            ...workspace,
-            viewport: {
-              x: viewport.x,
-              y: viewport.y,
-              zoom: viewport.zoom,
-            },
-          }
-        }),
-      )
-    },
-    [activeWorkspace],
-  )
+        return {
+          ...workspace,
+          viewport: {
+            x: viewport.x,
+            y: viewport.y,
+            zoom: viewport.zoom,
+          },
+        }
+      }),
+    )
+  }, [])
 
-  const handleWorkspaceMinimapVisibilityChange = useCallback(
-    (isVisible: boolean): void => {
-      if (!activeWorkspace) {
-        return
-      }
+  const handleWorkspaceMinimapVisibilityChange = useCallback((isVisible: boolean): void => {
+    const { activeWorkspaceId, setWorkspaces } = useAppStore.getState()
+    if (!activeWorkspaceId) {
+      return
+    }
 
-      setWorkspaces(previous =>
-        previous.map(workspace => {
-          if (workspace.id !== activeWorkspace.id) {
-            return workspace
-          }
+    setWorkspaces(previous =>
+      previous.map(workspace => {
+        if (workspace.id !== activeWorkspaceId) {
+          return workspace
+        }
 
-          if (workspace.isMinimapVisible === isVisible) {
-            return workspace
-          }
+        if (workspace.isMinimapVisible === isVisible) {
+          return workspace
+        }
 
-          return {
-            ...workspace,
-            isMinimapVisible: isVisible,
-          }
-        }),
-      )
-    },
-    [activeWorkspace],
-  )
+        return {
+          ...workspace,
+          isMinimapVisible: isVisible,
+        }
+      }),
+    )
+  }, [])
 
-  const handleWorkspaceSpacesChange = useCallback(
-    (spaces: WorkspaceState['spaces']): void => {
-      if (!activeWorkspace) {
-        return
-      }
+  const handleWorkspaceSpacesChange = useCallback((spaces: WorkspaceState['spaces']): void => {
+    const { activeWorkspaceId, setWorkspaces } = useAppStore.getState()
+    if (!activeWorkspaceId) {
+      return
+    }
 
-      setWorkspaces(previous =>
-        previous.map(workspace => {
-          if (workspace.id !== activeWorkspace.id) {
-            return workspace
-          }
+    setWorkspaces(previous =>
+      previous.map(workspace => {
+        if (workspace.id !== activeWorkspaceId) {
+          return workspace
+        }
 
-          const sanitizedSpaces = sanitizeWorkspaceSpaces(spaces)
-          const hasActiveSpace =
-            workspace.activeSpaceId !== null &&
-            sanitizedSpaces.some(space => space.id === workspace.activeSpaceId)
+        const sanitizedSpaces = sanitizeWorkspaceSpaces(spaces)
+        const hasActiveSpace =
+          workspace.activeSpaceId !== null &&
+          sanitizedSpaces.some(space => space.id === workspace.activeSpaceId)
 
-          return {
-            ...workspace,
-            spaces: sanitizedSpaces,
-            activeSpaceId: hasActiveSpace ? workspace.activeSpaceId : null,
-          }
-        }),
-      )
-    },
-    [activeWorkspace],
-  )
+        return {
+          ...workspace,
+          spaces: sanitizedSpaces,
+          activeSpaceId: hasActiveSpace ? workspace.activeSpaceId : null,
+        }
+      }),
+    )
+  }, [])
 
-  const handleWorkspaceActiveSpaceChange = useCallback(
-    (spaceId: string | null): void => {
-      if (!activeWorkspace) {
-        return
-      }
+  const handleWorkspaceActiveSpaceChange = useCallback((spaceId: string | null): void => {
+    const { activeWorkspaceId, setWorkspaces } = useAppStore.getState()
+    if (!activeWorkspaceId) {
+      return
+    }
 
-      setWorkspaces(previous =>
-        previous.map(workspace => {
-          if (workspace.id !== activeWorkspace.id) {
-            return workspace
-          }
+    setWorkspaces(previous =>
+      previous.map(workspace => {
+        if (workspace.id !== activeWorkspaceId) {
+          return workspace
+        }
 
-          const hasTargetSpace =
-            spaceId !== null && workspace.spaces.some(space => space.id === spaceId)
-          const nextSpaceId = hasTargetSpace ? spaceId : null
-          if (workspace.activeSpaceId === nextSpaceId) {
-            return workspace
-          }
+        const hasTargetSpace =
+          spaceId !== null && workspace.spaces.some(space => space.id === spaceId)
+        const nextSpaceId = hasTargetSpace ? spaceId : null
+        if (workspace.activeSpaceId === nextSpaceId) {
+          return workspace
+        }
 
-          return {
-            ...workspace,
-            activeSpaceId: nextSpaceId,
-          }
-        }),
-      )
-    },
-    [activeWorkspace],
-  )
+        return {
+          ...workspace,
+          activeSpaceId: nextSpaceId,
+        }
+      }),
+    )
+  }, [])
 
   const handleWorkspaceWorktreesRootChange = useCallback(
     (worktreesRoot: string): void => {
-      if (!activeWorkspace) {
+      const { activeWorkspaceId, setWorkspaces } = useAppStore.getState()
+      if (!activeWorkspaceId) {
         return
       }
 
       setWorkspaces(previous =>
         previous.map(workspace => {
-          if (workspace.id !== activeWorkspace.id) {
+          if (workspace.id !== activeWorkspaceId) {
             return workspace
           }
 
@@ -286,16 +268,18 @@ export default function App(): React.JSX.Element {
 
       requestPersistFlush()
     },
-    [activeWorkspace, requestPersistFlush],
+    [requestPersistFlush],
   )
 
   const handleRemoveWorkspace = useCallback(async (workspaceId: string): Promise<void> => {
-    setIsRemovingProject(true)
+    useAppStore.getState().setIsRemovingProject(true)
 
-    const targetWorkspace = workspacesRef.current.find(workspace => workspace.id === workspaceId)
+    const targetWorkspace = useAppStore
+      .getState()
+      .workspaces.find(workspace => workspace.id === workspaceId)
     if (!targetWorkspace) {
-      setProjectDeleteConfirmation(null)
-      setIsRemovingProject(false)
+      useAppStore.getState().setProjectDeleteConfirmation(null)
+      useAppStore.getState().setIsRemovingProject(false)
       return
     }
 
@@ -307,15 +291,19 @@ export default function App(): React.JSX.Element {
           .map(sessionId => window.coveApi.pty.kill({ sessionId })),
       )
 
-      const nextWorkspaces = workspacesRef.current.filter(workspace => workspace.id !== workspaceId)
-      setWorkspaces(nextWorkspaces)
-      setActiveWorkspaceId(currentActiveId =>
-        currentActiveId === workspaceId ? (nextWorkspaces[0]?.id ?? null) : currentActiveId,
-      )
-      setFocusRequest(null)
-      setProjectDeleteConfirmation(null)
+      const nextWorkspaces = useAppStore
+        .getState()
+        .workspaces.filter(workspace => workspace.id !== workspaceId)
+      useAppStore.getState().setWorkspaces(nextWorkspaces)
+      useAppStore
+        .getState()
+        .setActiveWorkspaceId(currentActiveId =>
+          currentActiveId === workspaceId ? (nextWorkspaces[0]?.id ?? null) : currentActiveId,
+        )
+      useAppStore.getState().setFocusRequest(null)
+      useAppStore.getState().setProjectDeleteConfirmation(null)
     } finally {
-      setIsRemovingProject(false)
+      useAppStore.getState().setIsRemovingProject(false)
     }
   }, [])
 
@@ -325,13 +313,15 @@ export default function App(): React.JSX.Element {
   })
 
   const handleSelectWorkspace = useCallback((workspaceId: string): void => {
-    setActiveWorkspaceId(workspaceId)
-    setFocusRequest(null)
+    const store = useAppStore.getState()
+    store.setActiveWorkspaceId(workspaceId)
+    store.setFocusRequest(null)
   }, [])
 
   const handleSelectAgentNode = useCallback((workspaceId: string, nodeId: string): void => {
-    setActiveWorkspaceId(workspaceId)
-    setFocusRequest(prev => ({
+    const store = useAppStore.getState()
+    store.setActiveWorkspaceId(workspaceId)
+    store.setFocusRequest(prev => ({
       workspaceId,
       nodeId,
       sequence: (prev?.sequence ?? 0) + 1,
@@ -339,17 +329,18 @@ export default function App(): React.JSX.Element {
   }, [])
 
   const handleRequestRemoveProject = useCallback((workspaceId: string): void => {
-    const targetWorkspace = workspacesRef.current.find(workspace => workspace.id === workspaceId)
+    const store = useAppStore.getState()
+    const targetWorkspace = store.workspaces.find(workspace => workspace.id === workspaceId)
     if (!targetWorkspace) {
-      setProjectContextMenu(null)
+      store.setProjectContextMenu(null)
       return
     }
 
-    setProjectDeleteConfirmation({
+    store.setProjectDeleteConfirmation({
       workspaceId: targetWorkspace.id,
       workspaceName: targetWorkspace.name,
     })
-    setProjectContextMenu(null)
+    store.setProjectContextMenu(null)
   }, [])
 
   return (
@@ -460,8 +451,8 @@ export default function App(): React.JSX.Element {
             setAgentSettings(next)
           }}
           onClose={() => {
-            setIsSettingsOpen(false)
             flushPersistNow()
+            setIsSettingsOpen(false)
           }}
         />
       ) : null}

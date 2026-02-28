@@ -1,9 +1,15 @@
 import { ipcMain } from 'electron'
 import { IPC_CHANNELS } from '../../../../shared/constants/ipc'
-import type { PersistWriteResult } from '../../../../shared/types/api'
+import type { PersistWriteResult, ReadAppStateResult } from '../../../../shared/types/api'
 import type { IpcRegistrationDisposable } from '../../../ipc/types'
-import type { WorkspaceStatePersistenceStore } from '../WorkspaceStatePersistenceStore'
-import { PayloadTooLargeError, normalizeWriteWorkspaceStateRawPayload } from './validate'
+import type { PersistenceStore } from '../PersistenceStore'
+import {
+  PayloadTooLargeError,
+  normalizeReadNodeScrollbackPayload,
+  normalizeWriteAppStatePayload,
+  normalizeWriteNodeScrollbackPayload,
+  normalizeWriteWorkspaceStateRawPayload,
+} from './validate'
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -14,7 +20,7 @@ function toErrorMessage(error: unknown): string {
 }
 
 export function registerPersistenceIpcHandlers(
-  getStore: () => Promise<WorkspaceStatePersistenceStore>,
+  getStore: () => Promise<PersistenceStore>,
   options: { maxRawBytes?: number } = {},
 ): IpcRegistrationDisposable {
   ipcMain.handle(
@@ -53,10 +59,85 @@ export function registerPersistenceIpcHandlers(
     },
   )
 
+  ipcMain.handle(IPC_CHANNELS.persistenceReadAppState, async (): Promise<ReadAppStateResult> => {
+    try {
+      const store = await getStore()
+      const state = await store.readAppState()
+      const recovery = store.consumeRecovery()
+      return { state, recovery }
+    } catch {
+      return { state: null, recovery: null }
+    }
+  })
+
+  ipcMain.handle(
+    IPC_CHANNELS.persistenceWriteAppState,
+    async (_event, payload: unknown): Promise<PersistWriteResult> => {
+      let normalized: { state: unknown }
+
+      try {
+        normalized = normalizeWriteAppStatePayload(payload)
+      } catch (error) {
+        return { ok: false, reason: 'unknown', message: toErrorMessage(error) }
+      }
+
+      try {
+        const store = await getStore()
+        return await store.writeAppState(normalized.state)
+      } catch (error) {
+        return { ok: false, reason: 'io', message: toErrorMessage(error) }
+      }
+    },
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.persistenceReadNodeScrollback,
+    async (_event, payload: unknown): Promise<string | null> => {
+      let normalized: { nodeId: string }
+
+      try {
+        normalized = normalizeReadNodeScrollbackPayload(payload)
+      } catch {
+        return null
+      }
+
+      try {
+        const store = await getStore()
+        return await store.readNodeScrollback(normalized.nodeId)
+      } catch {
+        return null
+      }
+    },
+  )
+
+  ipcMain.handle(
+    IPC_CHANNELS.persistenceWriteNodeScrollback,
+    async (_event, payload: unknown): Promise<PersistWriteResult> => {
+      let normalized: { nodeId: string; scrollback: string | null }
+
+      try {
+        normalized = normalizeWriteNodeScrollbackPayload(payload)
+      } catch (error) {
+        return { ok: false, reason: 'unknown', message: toErrorMessage(error) }
+      }
+
+      try {
+        const store = await getStore()
+        return await store.writeNodeScrollback(normalized.nodeId, normalized.scrollback)
+      } catch (error) {
+        return { ok: false, reason: 'io', message: toErrorMessage(error) }
+      }
+    },
+  )
+
   return {
     dispose: () => {
       ipcMain.removeHandler(IPC_CHANNELS.persistenceReadWorkspaceStateRaw)
       ipcMain.removeHandler(IPC_CHANNELS.persistenceWriteWorkspaceStateRaw)
+      ipcMain.removeHandler(IPC_CHANNELS.persistenceReadAppState)
+      ipcMain.removeHandler(IPC_CHANNELS.persistenceWriteAppState)
+      ipcMain.removeHandler(IPC_CHANNELS.persistenceReadNodeScrollback)
+      ipcMain.removeHandler(IPC_CHANNELS.persistenceWriteNodeScrollback)
     },
   }
 }

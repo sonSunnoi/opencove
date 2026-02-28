@@ -1,7 +1,9 @@
 import { useCallback, useLayoutEffect, useRef } from 'react'
 import type { Node } from '@xyflow/react'
 import type { Point, Size, TerminalNodeData, TaskPriority } from '../../../types'
+import { useScrollbackStore } from '../../../store/useScrollbackStore'
 import { clampSizeToNonOverlapping, findNearestFreePosition } from '../../../utils/collision'
+import { scheduleNodeScrollbackWrite } from '../../../utils/persistence/scrollbackSchedule'
 import { MIN_SIZE, TASK_SIZE, resolveDefaultTerminalWindowSize } from '../constants'
 import type { CreateNodeInput } from '../types'
 import { removeNodeWithRelations } from './useNodesStore.closeNode'
@@ -63,6 +65,7 @@ export function useWorkspaceCanvasNodesStore({
   const isAgentLaunchTokenCurrent = useCallback((nodeId: string, token: number): boolean => {
     return (agentLaunchTokenByNodeIdRef.current.get(nodeId) ?? 0) === token
   }, [])
+  const setNodeScrollback = useScrollbackStore(state => state.setNodeScrollback)
 
   const closeNode = useCallback(
     async (nodeId: string) => {
@@ -127,43 +130,28 @@ export function useWorkspaceCanvasNodesStore({
     [onRequestPersistFlush, spacesRef, upsertNode],
   )
 
-  const applyPendingScrollbacks = useCallback((targetNodes: Node<TerminalNodeData>[]) => {
-    const pendingScrollbacks = pendingScrollbackByNodeRef.current
-    if (pendingScrollbacks.size === 0) {
+  const applyPendingScrollbacks = useCallback(
+    (targetNodes: Node<TerminalNodeData>[]) => {
+      const pendingScrollbacks = pendingScrollbackByNodeRef.current
+      if (pendingScrollbacks.size === 0) {
+        return targetNodes
+      }
+
+      for (const [nodeId, pending] of pendingScrollbacks.entries()) {
+        const node = targetNodes.find(candidate => candidate.id === nodeId)
+        if (!node || node.data.kind === 'task') {
+          continue
+        }
+
+        setNodeScrollback(nodeId, pending)
+        scheduleNodeScrollbackWrite(nodeId, pending)
+      }
+
+      pendingScrollbacks.clear()
       return targetNodes
-    }
-
-    let hasChanged = false
-
-    const nextNodes = targetNodes.map(node => {
-      if (node.data.kind === 'task') {
-        return node
-      }
-
-      const pending = pendingScrollbacks.get(node.id)
-      if (pending === undefined) {
-        return node
-      }
-
-      const normalized = pending.length > 0 ? pending : null
-      if (node.data.scrollback === normalized) {
-        return node
-      }
-
-      hasChanged = true
-
-      return {
-        ...node,
-        data: {
-          ...node.data,
-          scrollback: normalized,
-        },
-      }
-    })
-
-    pendingScrollbacks.clear()
-    return hasChanged ? nextNodes : targetNodes
-  }, [])
+    },
+    [setNodeScrollback],
+  )
 
   const updateNodeScrollback = useCallback(
     (nodeId: string, scrollback: string) => {
@@ -172,38 +160,10 @@ export function useWorkspaceCanvasNodesStore({
         return
       }
 
-      const normalized = scrollback.length > 0 ? scrollback : null
-
-      setNodes(
-        prevNodes => {
-          let hasChanged = false
-
-          const nextNodes = prevNodes.map(node => {
-            if (node.id !== nodeId || node.data.kind === 'task') {
-              return node
-            }
-
-            if (node.data.scrollback === normalized) {
-              return node
-            }
-
-            hasChanged = true
-
-            return {
-              ...node,
-              data: {
-                ...node.data,
-                scrollback: normalized,
-              },
-            }
-          })
-
-          return hasChanged ? nextNodes : prevNodes
-        },
-        { syncLayout: false },
-      )
+      setNodeScrollback(nodeId, scrollback)
+      scheduleNodeScrollbackWrite(nodeId, scrollback)
     },
-    [setNodes],
+    [setNodeScrollback],
   )
 
   const updateTerminalTitle = useCallback(

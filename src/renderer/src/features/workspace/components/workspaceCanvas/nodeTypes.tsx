@@ -3,12 +3,89 @@ import type { Node } from '@xyflow/react'
 import { TaskNode } from '../TaskNode'
 import { TerminalNode } from '../TerminalNode'
 import type { Size, TerminalNodeData, WorkspaceSpaceState } from '../../types'
+import { useScrollbackStore } from '../../store/useScrollbackStore'
 import type {
   QuickUpdateTaskRequirement,
   QuickUpdateTaskTitle,
   UpdateNodeScrollback,
   UpdateTaskStatus,
 } from './types'
+
+function TerminalNodeType({
+  data,
+  id,
+  terminalFontSize,
+  closeNodeRef,
+  resizeNodeRef,
+  updateNodeScrollbackRef,
+  normalizeViewportForTerminalInteractionRef,
+  updateTerminalTitleRef,
+  renameTerminalTitleRef,
+}: {
+  data: TerminalNodeData
+  id: string
+  terminalFontSize: number
+  closeNodeRef: MutableRefObject<(nodeId: string) => Promise<void>>
+  resizeNodeRef: MutableRefObject<(nodeId: string, desiredSize: Size) => void>
+  updateNodeScrollbackRef: MutableRefObject<UpdateNodeScrollback>
+  normalizeViewportForTerminalInteractionRef: MutableRefObject<(nodeId: string) => void>
+  updateTerminalTitleRef: MutableRefObject<(nodeId: string, title: string) => void>
+  renameTerminalTitleRef: MutableRefObject<(nodeId: string, title: string) => void>
+}): ReactElement {
+  const scrollback = useScrollbackStore(state => state.scrollbackByNodeId[id] ?? null)
+
+  return (
+    <TerminalNode
+      sessionId={data.sessionId}
+      title={data.title}
+      kind={data.kind}
+      status={data.status}
+      directoryMismatch={
+        data.kind === 'agent' &&
+        data.agent?.expectedDirectory &&
+        data.agent.expectedDirectory !== data.agent.executionDirectory
+          ? {
+              executionDirectory: data.agent.executionDirectory,
+              expectedDirectory: data.agent.expectedDirectory,
+            }
+          : data.kind === 'terminal' &&
+              data.executionDirectory &&
+              data.expectedDirectory &&
+              data.expectedDirectory !== data.executionDirectory
+            ? {
+                executionDirectory: data.executionDirectory,
+                expectedDirectory: data.expectedDirectory,
+              }
+            : null
+      }
+      lastError={data.lastError}
+      width={data.width}
+      height={data.height}
+      terminalFontSize={terminalFontSize}
+      scrollback={scrollback}
+      onClose={() => {
+        void closeNodeRef.current(id)
+      }}
+      onResize={size => resizeNodeRef.current(id, size)}
+      onScrollbackChange={nextScrollback => updateNodeScrollbackRef.current(id, nextScrollback)}
+      onCommandRun={
+        data.kind === 'terminal'
+          ? command => {
+              updateTerminalTitleRef.current(id, command)
+            }
+          : undefined
+      }
+      onTitleCommit={
+        data.kind === 'terminal'
+          ? nextTitle => {
+              renameTerminalTitleRef.current(id, nextTitle)
+            }
+          : undefined
+      }
+      onInteractionStart={() => normalizeViewportForTerminalInteractionRef.current(id)}
+    />
+  )
+}
 
 interface WorkspaceCanvasNodeTypesParams {
   nodesRef: MutableRefObject<Node<TerminalNodeData>[]>
@@ -60,57 +137,21 @@ export function useWorkspaceCanvasNodeTypes({
 > {
   return useMemo(
     () => ({
-      terminalNode: ({ data, id }: { data: TerminalNodeData; id: string }) => (
-        <TerminalNode
-          sessionId={data.sessionId}
-          title={data.title}
-          kind={data.kind}
-          status={data.status}
-          directoryMismatch={
-            data.kind === 'agent' &&
-            data.agent?.expectedDirectory &&
-            data.agent.expectedDirectory !== data.agent.executionDirectory
-              ? {
-                  executionDirectory: data.agent.executionDirectory,
-                  expectedDirectory: data.agent.expectedDirectory,
-                }
-              : data.kind === 'terminal' &&
-                  data.executionDirectory &&
-                  data.expectedDirectory &&
-                  data.expectedDirectory !== data.executionDirectory
-                ? {
-                    executionDirectory: data.executionDirectory,
-                    expectedDirectory: data.expectedDirectory,
-                  }
-                : null
-          }
-          lastError={data.lastError}
-          width={data.width}
-          height={data.height}
-          terminalFontSize={terminalFontSize}
-          scrollback={data.scrollback}
-          onClose={() => {
-            void closeNodeRef.current(id)
-          }}
-          onResize={size => resizeNodeRef.current(id, size)}
-          onScrollbackChange={scrollback => updateNodeScrollbackRef.current(id, scrollback)}
-          onCommandRun={
-            data.kind === 'terminal'
-              ? command => {
-                  updateTerminalTitleRef.current(id, command)
-                }
-              : undefined
-          }
-          onTitleCommit={
-            data.kind === 'terminal'
-              ? nextTitle => {
-                  renameTerminalTitleRef.current(id, nextTitle)
-                }
-              : undefined
-          }
-          onInteractionStart={() => normalizeViewportForTerminalInteractionRef.current(id)}
-        />
-      ),
+      terminalNode: ({ data, id }: { data: TerminalNodeData; id: string }) => {
+        return (
+          <TerminalNodeType
+            data={data}
+            id={id}
+            terminalFontSize={terminalFontSize}
+            closeNodeRef={closeNodeRef}
+            resizeNodeRef={resizeNodeRef}
+            updateNodeScrollbackRef={updateNodeScrollbackRef}
+            normalizeViewportForTerminalInteractionRef={normalizeViewportForTerminalInteractionRef}
+            updateTerminalTitleRef={updateTerminalTitleRef}
+            renameTerminalTitleRef={renameTerminalTitleRef}
+          />
+        )
+      },
       taskNode: ({ data, id }: { data: TerminalNodeData; id: string }) => {
         if (!data.task) {
           return null

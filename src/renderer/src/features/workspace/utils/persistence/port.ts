@@ -1,4 +1,4 @@
-import type { PersistWriteResult } from '@shared/types/api'
+import type { PersistWriteResult, ReadAppStateResult } from '@shared/types/api'
 import { STORAGE_KEY } from './constants'
 import { getStorage, isQuotaExceededError } from './storage'
 
@@ -6,9 +6,15 @@ export type PersistencePortKind = 'ipc' | 'localStorage'
 
 export interface PersistencePort {
   kind: PersistencePortKind
-  readRaw: () => Promise<string | null>
-  writeRaw: (raw: string) => Promise<PersistWriteResult>
+  readAppState: () => Promise<ReadAppStateResult | null>
+  writeAppState: (state: unknown) => Promise<PersistWriteResult>
+  readNodeScrollback: (nodeId: string) => Promise<string | null>
+  writeNodeScrollback: (nodeId: string, scrollback: string | null) => Promise<PersistWriteResult>
+  readWorkspaceStateRaw: () => Promise<string | null>
+  writeWorkspaceStateRaw: (raw: string) => Promise<PersistWriteResult>
 }
+
+const NODE_SCROLLBACK_KEY_PREFIX = 'cove:m0:node-scrollback:'
 
 function toErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -30,14 +36,42 @@ function createIpcPort(): PersistencePort | null {
 
   return {
     kind: 'ipc',
-    readRaw: async () => {
+    readAppState: async () => {
+      try {
+        return await persistenceApi.readAppState()
+      } catch {
+        return null
+      }
+    },
+    writeAppState: async state => {
+      try {
+        return await persistenceApi.writeAppState({ state })
+      } catch (error) {
+        return { ok: false, reason: 'io', message: toErrorMessage(error) }
+      }
+    },
+    readNodeScrollback: async nodeId => {
+      try {
+        return await persistenceApi.readNodeScrollback({ nodeId })
+      } catch {
+        return null
+      }
+    },
+    writeNodeScrollback: async (nodeId, scrollback) => {
+      try {
+        return await persistenceApi.writeNodeScrollback({ nodeId, scrollback })
+      } catch (error) {
+        return { ok: false, reason: 'io', message: toErrorMessage(error) }
+      }
+    },
+    readWorkspaceStateRaw: async () => {
       try {
         return await persistenceApi.readWorkspaceStateRaw()
       } catch {
         return null
       }
     },
-    writeRaw: async raw => {
+    writeWorkspaceStateRaw: async raw => {
       try {
         return await persistenceApi.writeWorkspaceStateRaw({ raw })
       } catch (error) {
@@ -55,8 +89,59 @@ function createLocalStoragePort(): PersistencePort | null {
 
   return {
     kind: 'localStorage',
-    readRaw: async () => storage.getItem(STORAGE_KEY),
-    writeRaw: async raw => {
+    readAppState: async () => {
+      const raw = storage.getItem(STORAGE_KEY)
+      if (!raw) {
+        return { state: null, recovery: null }
+      }
+
+      try {
+        const parsed = JSON.parse(raw) as unknown
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          return { state: null, recovery: null }
+        }
+
+        return { state: parsed, recovery: null }
+      } catch {
+        return { state: null, recovery: null }
+      }
+    },
+    writeAppState: async state => {
+      const raw = JSON.stringify(state)
+
+      try {
+        storage.setItem(STORAGE_KEY, raw)
+        return { ok: true, level: 'full', bytes: raw.length }
+      } catch (error) {
+        return {
+          ok: false,
+          reason: isQuotaExceededError(error) ? 'quota' : 'unknown',
+          message: toErrorMessage(error),
+        }
+      }
+    },
+    readNodeScrollback: async nodeId => storage.getItem(`${NODE_SCROLLBACK_KEY_PREFIX}${nodeId}`),
+    writeNodeScrollback: async (nodeId, scrollback) => {
+      const key = `${NODE_SCROLLBACK_KEY_PREFIX}${nodeId}`
+
+      try {
+        if (!scrollback || scrollback.length === 0) {
+          storage.removeItem(key)
+          return { ok: true, level: 'full', bytes: 0 }
+        }
+
+        storage.setItem(key, scrollback)
+        return { ok: true, level: 'full', bytes: scrollback.length }
+      } catch (error) {
+        return {
+          ok: false,
+          reason: isQuotaExceededError(error) ? 'quota' : 'unknown',
+          message: toErrorMessage(error),
+        }
+      }
+    },
+    readWorkspaceStateRaw: async () => storage.getItem(STORAGE_KEY),
+    writeWorkspaceStateRaw: async raw => {
       try {
         storage.setItem(STORAGE_KEY, raw)
         return { ok: true, level: 'full', bytes: raw.length }

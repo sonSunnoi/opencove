@@ -37,7 +37,7 @@ describe('workspace persistence (write)', () => {
     })
   })
 
-  it('falls back to persisting without scrollback when quota is exceeded', async () => {
+  it('falls back to persisting settings only when quota is exceeded', async () => {
     const previousStorage = window.localStorage
 
     class LimitedStorage extends MockStorage {
@@ -89,8 +89,8 @@ describe('workspace persistence (write)', () => {
                 startedAt: null,
                 endedAt: null,
                 exitCode: null,
-                lastError: null,
-                scrollback: 'x'.repeat(5000),
+                lastError: 'x'.repeat(5000),
+                scrollback: null,
                 agent: null,
                 task: null,
               },
@@ -103,10 +103,10 @@ describe('workspace persistence (write)', () => {
 
     const result = await writePersistedState(state)
     expect(result.ok).toBe(true)
-    expect(result.ok ? result.level : null).toBe('no_scrollback')
+    expect(result.ok ? result.level : null).toBe('settings_only')
 
     const restored = await readPersistedState()
-    expect(restored?.workspaces[0]?.nodes[0]?.scrollback).toBeNull()
+    expect(restored?.workspaces).toEqual([])
 
     Object.defineProperty(window, 'localStorage', {
       configurable: true,

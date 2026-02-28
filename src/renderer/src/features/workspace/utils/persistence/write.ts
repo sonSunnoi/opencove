@@ -52,37 +52,33 @@ export async function writePersistedState(state: PersistedAppState): Promise<Per
     formatVersion: PERSISTED_APP_STATE_FORMAT_VERSION,
   }
 
-  const raw = JSON.stringify(normalizedState)
-
   let fullResult: PersistWriteResult
   try {
-    fullResult = await port.writeRaw(raw)
+    fullResult = await port.writeAppState(normalizedState)
   } catch (error) {
     return { ok: false, reason: 'unknown', message: toErrorMessage(error) }
   }
 
   if (fullResult.ok) {
-    return { ok: true, level: 'full', bytes: raw.length }
+    return { ok: true, level: 'full', bytes: fullResult.bytes }
   }
 
   if (fullResult.reason !== 'quota' && fullResult.reason !== 'payload_too_large') {
     return fullResult
   }
 
-  const degradedRaw = JSON.stringify(stripScrollbackFromState(normalizedState))
-  const degradedResult = await port.writeRaw(degradedRaw)
+  const degradedResult = await port.writeAppState(stripScrollbackFromState(normalizedState))
   if (degradedResult.ok) {
-    return { ok: true, level: 'no_scrollback', bytes: degradedRaw.length }
+    return { ok: true, level: 'no_scrollback', bytes: degradedResult.bytes }
   }
 
   if (degradedResult.reason !== 'quota' && degradedResult.reason !== 'payload_too_large') {
     return degradedResult
   }
 
-  const minimalRaw = JSON.stringify(settingsOnlyState(normalizedState))
-  const minimalResult = await port.writeRaw(minimalRaw)
+  const minimalResult = await port.writeAppState(settingsOnlyState(normalizedState))
   if (minimalResult.ok) {
-    return { ok: true, level: 'settings_only', bytes: minimalRaw.length }
+    return { ok: true, level: 'settings_only', bytes: minimalResult.bytes }
   }
 
   return minimalResult
@@ -95,7 +91,7 @@ export async function writeRawPersistedState(raw: string): Promise<PersistWriteR
   }
 
   try {
-    return await port.writeRaw(raw)
+    return await port.writeWorkspaceStateRaw(raw)
   } catch (error) {
     return { ok: false, reason: 'unknown', message: toErrorMessage(error) }
   }

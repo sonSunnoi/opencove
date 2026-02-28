@@ -4,7 +4,6 @@ import { DEFAULT_WORKSPACE_MINIMAP_VISIBLE } from '../../types'
 import { PERSISTED_APP_STATE_FORMAT_VERSION } from './constants'
 import {
   normalizeOptionalString,
-  normalizeScrollback,
   normalizeWorkspaceSpaceNodeIds,
   normalizeWorkspaceSpaceRect,
   normalizeWorkspaceViewport,
@@ -56,7 +55,7 @@ export function toPersistedState(
         endedAt: node.data.endedAt,
         exitCode: node.data.exitCode,
         lastError: node.data.lastError,
-        scrollback: normalizeScrollback(node.data.scrollback),
+        scrollback: null,
         executionDirectory: normalizeOptionalString(node.data.executionDirectory),
         expectedDirectory: normalizeOptionalString(node.data.expectedDirectory),
         agent: node.data.agent,

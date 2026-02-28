@@ -14,6 +14,8 @@ import type {
   ListAgentModelsInput,
   ListAgentModelsResult,
   PersistWriteResult,
+  ReadAppStateResult,
+  ReadNodeScrollbackInput,
   ResizeTerminalInput,
   RemoveGitWorktreeInput,
   SnapshotTerminalInput,
@@ -27,6 +29,8 @@ import type {
   TerminalDoneEvent,
   TerminalExitEvent,
   WorkspaceDirectory,
+  WriteAppStateInput,
+  WriteNodeScrollbackInput,
   WriteWorkspaceStateRawInput,
   WriteTerminalInput,
 } from '../shared/types/api'
@@ -40,6 +44,10 @@ export interface CoveApi {
   persistence: {
     readWorkspaceStateRaw: () => Promise<string | null>
     writeWorkspaceStateRaw: (payload: WriteWorkspaceStateRawInput) => Promise<PersistWriteResult>
+    readAppState: () => Promise<ReadAppStateResult>
+    writeAppState: (payload: WriteAppStateInput) => Promise<PersistWriteResult>
+    readNodeScrollback: (payload: ReadNodeScrollbackInput) => Promise<string | null>
+    writeNodeScrollback: (payload: WriteNodeScrollbackInput) => Promise<PersistWriteResult>
   }
   workspace: {
     selectDirectory: () => Promise<WorkspaceDirectory | null>

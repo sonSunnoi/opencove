@@ -19,6 +19,7 @@ export interface FocusRequest {
 export interface PersistNotice {
   tone: 'warning' | 'error'
   message: string
+  kind?: 'recovery' | 'write'
 }
 
 export interface ProjectContextMenuState {

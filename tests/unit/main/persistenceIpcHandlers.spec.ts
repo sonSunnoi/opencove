@@ -32,6 +32,23 @@ describe('persistence IPC handlers', () => {
           bytes: 0,
         }),
       ),
+      readAppState: vi.fn(async () => null),
+      writeAppState: vi.fn(
+        async (_state: unknown): Promise<PersistWriteResult> => ({
+          ok: true,
+          level: 'full',
+          bytes: 0,
+        }),
+      ),
+      readNodeScrollback: vi.fn(async (_nodeId: string) => null),
+      writeNodeScrollback: vi.fn(
+        async (_nodeId: string, _scrollback: string | null): Promise<PersistWriteResult> => ({
+          ok: true,
+          level: 'full',
+          bytes: 0,
+        }),
+      ),
+      consumeRecovery: vi.fn(() => null),
       dispose: vi.fn(),
     }
 
@@ -58,6 +75,13 @@ describe('persistence IPC handlers', () => {
     const store = {
       readWorkspaceStateRaw: vi.fn(async () => null),
       writeWorkspaceStateRaw: vi.fn(async (_raw: string) => writeResult),
+      readAppState: vi.fn(async () => null),
+      writeAppState: vi.fn(async (_state: unknown) => writeResult),
+      readNodeScrollback: vi.fn(async (_nodeId: string) => null),
+      writeNodeScrollback: vi.fn(
+        async (_nodeId: string, _scrollback: string | null) => writeResult,
+      ),
+      consumeRecovery: vi.fn(() => null),
       dispose: vi.fn(),
     }
 
@@ -90,6 +114,23 @@ describe('persistence IPC handlers', () => {
           bytes: 0,
         }),
       ),
+      readAppState: vi.fn(async () => null),
+      writeAppState: vi.fn(
+        async (_state: unknown): Promise<PersistWriteResult> => ({
+          ok: true,
+          level: 'full',
+          bytes: 0,
+        }),
+      ),
+      readNodeScrollback: vi.fn(async (_nodeId: string) => null),
+      writeNodeScrollback: vi.fn(
+        async (_nodeId: string, _scrollback: string | null): Promise<PersistWriteResult> => ({
+          ok: true,
+          level: 'full',
+          bytes: 0,
+        }),
+      ),
+      consumeRecovery: vi.fn(() => null),
       dispose: vi.fn(),
     }
 
@@ -126,6 +167,23 @@ describe('persistence IPC handlers', () => {
           bytes: 0,
         }),
       ),
+      readAppState: vi.fn(async () => null),
+      writeAppState: vi.fn(
+        async (_state: unknown): Promise<PersistWriteResult> => ({
+          ok: true,
+          level: 'full',
+          bytes: 0,
+        }),
+      ),
+      readNodeScrollback: vi.fn(async (_nodeId: string) => null),
+      writeNodeScrollback: vi.fn(
+        async (_nodeId: string, _scrollback: string | null): Promise<PersistWriteResult> => ({
+          ok: true,
+          level: 'full',
+          bytes: 0,
+        }),
+      ),
+      consumeRecovery: vi.fn(() => null),
       dispose: vi.fn(),
     }
 
@@ -164,6 +222,23 @@ describe('persistence IPC handlers', () => {
           bytes: 0,
         }),
       ),
+      readAppState: vi.fn(async () => null),
+      writeAppState: vi.fn(
+        async (_state: unknown): Promise<PersistWriteResult> => ({
+          ok: true,
+          level: 'full',
+          bytes: 0,
+        }),
+      ),
+      readNodeScrollback: vi.fn(async (_nodeId: string) => null),
+      writeNodeScrollback: vi.fn(
+        async (_nodeId: string, _scrollback: string | null): Promise<PersistWriteResult> => ({
+          ok: true,
+          level: 'full',
+          bytes: 0,
+        }),
+      ),
+      consumeRecovery: vi.fn(() => null),
       dispose: vi.fn(),
     }
 
@@ -180,6 +255,137 @@ describe('persistence IPC handlers', () => {
     expect(ipcMain.removeHandler).toHaveBeenCalledWith(
       IPC_CHANNELS.persistenceWriteWorkspaceStateRaw,
     )
+    expect(ipcMain.removeHandler).toHaveBeenCalledWith(IPC_CHANNELS.persistenceReadAppState)
+    expect(ipcMain.removeHandler).toHaveBeenCalledWith(IPC_CHANNELS.persistenceWriteAppState)
+    expect(ipcMain.removeHandler).toHaveBeenCalledWith(IPC_CHANNELS.persistenceReadNodeScrollback)
+    expect(ipcMain.removeHandler).toHaveBeenCalledWith(IPC_CHANNELS.persistenceWriteNodeScrollback)
     expect(handlers.size).toBe(0)
+  })
+
+  it('reads persisted app state through the store', async () => {
+    vi.resetModules()
+
+    const { handlers, ipcMain } = createIpcHarness()
+    vi.doMock('electron', () => ({ ipcMain }))
+
+    const state = {
+      formatVersion: 1,
+      activeWorkspaceId: null,
+      workspaces: [],
+      settings: {},
+    }
+
+    const store = {
+      readWorkspaceStateRaw: vi.fn(async () => null),
+      writeWorkspaceStateRaw: vi.fn(
+        async (_raw: string): Promise<PersistWriteResult> => ({
+          ok: true,
+          level: 'full',
+          bytes: 0,
+        }),
+      ),
+      readAppState: vi.fn(async () => state),
+      writeAppState: vi.fn(
+        async (_nextState: unknown): Promise<PersistWriteResult> => ({
+          ok: true,
+          level: 'full',
+          bytes: 0,
+        }),
+      ),
+      readNodeScrollback: vi.fn(async (_nodeId: string) => null),
+      writeNodeScrollback: vi.fn(
+        async (_nodeId: string, _scrollback: string | null): Promise<PersistWriteResult> => ({
+          ok: true,
+          level: 'full',
+          bytes: 0,
+        }),
+      ),
+      consumeRecovery: vi.fn(() => null),
+      dispose: vi.fn(),
+    }
+
+    const { registerPersistenceIpcHandlers } =
+      await import('../../../src/main/modules/persistence/ipc/register')
+
+    registerPersistenceIpcHandlers(async () => store)
+
+    const handler = handlers.get(IPC_CHANNELS.persistenceReadAppState)
+    expect(handler).toBeTypeOf('function')
+
+    await expect(handler?.()).resolves.toEqual({ state, recovery: null })
+    expect(store.readAppState).toHaveBeenCalledTimes(1)
+  })
+
+  it('writes persisted app state through the store', async () => {
+    vi.resetModules()
+
+    const { handlers, ipcMain } = createIpcHarness()
+    vi.doMock('electron', () => ({ ipcMain }))
+
+    const writeResult: PersistWriteResult = { ok: true, level: 'full', bytes: 12 }
+    const store = {
+      readWorkspaceStateRaw: vi.fn(async () => null),
+      writeWorkspaceStateRaw: vi.fn(async (_raw: string) => writeResult),
+      readAppState: vi.fn(async () => null),
+      writeAppState: vi.fn(async (_state: unknown) => writeResult),
+      readNodeScrollback: vi.fn(async (_nodeId: string) => null),
+      writeNodeScrollback: vi.fn(
+        async (_nodeId: string, _scrollback: string | null) => writeResult,
+      ),
+      consumeRecovery: vi.fn(() => null),
+      dispose: vi.fn(),
+    }
+
+    const { registerPersistenceIpcHandlers } =
+      await import('../../../src/main/modules/persistence/ipc/register')
+
+    registerPersistenceIpcHandlers(async () => store)
+
+    const handler = handlers.get(IPC_CHANNELS.persistenceWriteAppState)
+    expect(handler).toBeTypeOf('function')
+
+    const state = {
+      formatVersion: 1,
+      activeWorkspaceId: null,
+      workspaces: [],
+      settings: {},
+    }
+
+    await expect(handler?.(null, { state })).resolves.toEqual(writeResult)
+    expect(store.writeAppState).toHaveBeenCalledWith(state)
+  })
+
+  it('writes node scrollback through the store', async () => {
+    vi.resetModules()
+
+    const { handlers, ipcMain } = createIpcHarness()
+    vi.doMock('electron', () => ({ ipcMain }))
+
+    const writeResult: PersistWriteResult = { ok: true, level: 'full', bytes: 12 }
+    const store = {
+      readWorkspaceStateRaw: vi.fn(async () => null),
+      writeWorkspaceStateRaw: vi.fn(async (_raw: string) => writeResult),
+      readAppState: vi.fn(async () => null),
+      writeAppState: vi.fn(async (_state: unknown) => writeResult),
+      readNodeScrollback: vi.fn(async (_nodeId: string) => null),
+      writeNodeScrollback: vi.fn(
+        async (_nodeId: string, _scrollback: string | null) => writeResult,
+      ),
+      consumeRecovery: vi.fn(() => null),
+      dispose: vi.fn(),
+    }
+
+    const { registerPersistenceIpcHandlers } =
+      await import('../../../src/main/modules/persistence/ipc/register')
+
+    registerPersistenceIpcHandlers(async () => store)
+
+    const handler = handlers.get(IPC_CHANNELS.persistenceWriteNodeScrollback)
+    expect(handler).toBeTypeOf('function')
+
+    await expect(handler?.(null, { nodeId: 'node-1', scrollback: 'hello' })).resolves.toEqual(
+      writeResult,
+    )
+    expect(store.writeNodeScrollback).toHaveBeenCalledWith('node-1', 'hello')
   })
 })

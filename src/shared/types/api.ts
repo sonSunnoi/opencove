@@ -29,6 +29,26 @@ export interface WriteWorkspaceStateRawInput {
   raw: string
 }
 
+export type PersistenceRecoveryReason = 'corrupt_db' | 'migration_failed'
+
+export interface ReadAppStateResult {
+  state: unknown | null
+  recovery: PersistenceRecoveryReason | null
+}
+
+export interface WriteAppStateInput {
+  state: unknown
+}
+
+export interface ReadNodeScrollbackInput {
+  nodeId: string
+}
+
+export interface WriteNodeScrollbackInput {
+  nodeId: string
+  scrollback: string | null
+}
+
 export interface EnsureDirectoryInput {
   path: string
 }

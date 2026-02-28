@@ -6,9 +6,12 @@ import type {
   TerminalNodeData,
   WorkspaceState,
 } from '../../features/workspace/types'
-import { readPersistedState } from '../../features/workspace/utils/persistence'
+import { useScrollbackStore } from '../../features/workspace/store/useScrollbackStore'
+import { readPersistedStateWithMeta } from '../../features/workspace/utils/persistence'
+import { getPersistencePort } from '../../features/workspace/utils/persistence/port'
 import { toRuntimeNodes } from '../../features/workspace/utils/nodeTransform'
 import { toAgentNodeTitle, toErrorMessage } from '../utils/format'
+import { useAppStore } from '../store/useAppStore'
 import { sanitizeWorkspaceSpaces } from '../utils/workspaceSpaces'
 
 function isFulfilled<T>(result: PromiseSettledResult<T>): result is PromiseFulfilledResult<T> {
@@ -62,6 +65,7 @@ export function useHydrateAppState({
 
   useEffect(() => {
     let isCancelled = false
+    useScrollbackStore.getState().clearAllScrollbacks()
     const hydrateWorkspace = async (
       workspace: PersistedWorkspaceState,
     ): Promise<WorkspaceState> => {
@@ -337,9 +341,19 @@ export function useHydrateAppState({
     }
 
     const hydrateAppState = async (): Promise<void> => {
-      const persisted = await readPersistedState()
+      const { state: persisted, recovery } = await readPersistedStateWithMeta()
       if (isCancelled) {
         return
+      }
+
+      if (recovery) {
+        const recoveryMessage =
+          recovery === 'corrupt_db'
+            ? 'Persistence database was corrupted and has been reset.'
+            : 'Persistence migration failed and has been reset.'
+        useAppStore
+          .getState()
+          .setPersistNotice({ tone: 'warning', message: recoveryMessage, kind: 'recovery' })
       }
 
       if (!persisted) {
@@ -388,6 +402,30 @@ export function useHydrateAppState({
       setActiveWorkspaceId(resolvedActiveWorkspaceId)
 
       try {
+        const port = getPersistencePort()
+        if (port) {
+          const nodeIds = persisted.workspaces.flatMap(workspace =>
+            workspace.nodes.filter(node => node.kind !== 'task').map(node => node.id),
+          )
+
+          const scrollbackResults = await Promise.allSettled(
+            nodeIds.map(nodeId => port.readNodeScrollback(nodeId)),
+          )
+
+          if (!isCancelled) {
+            const scrollbacks: Record<string, string> = {}
+            scrollbackResults.forEach((result, index) => {
+              if (result.status !== 'fulfilled' || !result.value) {
+                return
+              }
+
+              scrollbacks[nodeIds[index] as string] = result.value
+            })
+
+            useScrollbackStore.getState().hydrateScrollbacks(scrollbacks)
+          }
+        }
+
         await restore(persisted, resolvedActiveWorkspaceId)
       } finally {
         if (!isCancelled) {

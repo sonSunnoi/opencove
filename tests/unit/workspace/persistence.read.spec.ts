@@ -143,7 +143,7 @@ describe('workspace persistence (read/normalize)', () => {
     expect(restored?.workspaces[0].worktreesRoot).toBe('.cove/worktrees')
     expect(restored?.workspaces[0].nodes).toHaveLength(3)
     expect(restored?.workspaces[0].nodes[0].title).toBe('terminal-1')
-    expect(restored?.workspaces[0].nodes[0].scrollback).toContain('terminal output line 2')
+    expect(restored?.workspaces[0].nodes[0].scrollback).toBeNull()
     expect(restored?.workspaces[0].nodes[1].kind).toBe('task')
     expect(restored?.workspaces[0].nodes[1].task?.status).toBe('doing')
     expect(restored?.workspaces[0].nodes[2].kind).toBe('agent')
@@ -164,7 +164,7 @@ describe('workspace persistence (read/normalize)', () => {
     expect(restored?.settings.canvasInputMode).toBe('trackpad')
   })
 
-  it('truncates oversized terminal scrollback', async () => {
+  it('does not persist terminal scrollback in app state payload', async () => {
     const prefix = 'old\n'
     const suffix = 'tail\n'
     const oversized = `${prefix}${'x'.repeat(260_000)}${suffix}`
@@ -209,11 +209,7 @@ describe('workspace persistence (read/normalize)', () => {
     await writePersistedState(persisted)
 
     const restored = await readPersistedState()
-    const restoredScrollback = restored?.workspaces[0]?.nodes[0]?.scrollback ?? ''
-
-    expect(restoredScrollback.length).toBe(200_000)
-    expect(restoredScrollback).toContain(suffix)
-    expect(restoredScrollback).not.toContain(prefix)
+    expect(restored?.workspaces[0]?.nodes[0]?.scrollback).toBeNull()
   })
 
   it('falls back to default settings when persisted settings are missing', async () => {

@@ -1,4 +1,9 @@
-import type { WriteWorkspaceStateRawInput } from '../../../../shared/types/api'
+import type {
+  ReadNodeScrollbackInput,
+  WriteAppStateInput,
+  WriteNodeScrollbackInput,
+  WriteWorkspaceStateRawInput,
+} from '../../../../shared/types/api'
 
 const DEFAULT_MAX_RAW_BYTES = 50 * 1024 * 1024
 
@@ -46,4 +51,53 @@ export function normalizeWriteWorkspaceStateRawPayload(
   }
 
   return { raw }
+}
+
+export function normalizeWriteAppStatePayload(payload: unknown): WriteAppStateInput {
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('Invalid payload for persistence:write-app-state')
+  }
+
+  const record = payload as Record<string, unknown>
+  const state = record.state
+  if (!state || typeof state !== 'object' || Array.isArray(state)) {
+    throw new Error('Invalid app state payload for persistence:write-app-state')
+  }
+
+  return { state }
+}
+
+export function normalizeReadNodeScrollbackPayload(payload: unknown): ReadNodeScrollbackInput {
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('Invalid payload for persistence:read-node-scrollback')
+  }
+
+  const record = payload as Record<string, unknown>
+  const nodeId = typeof record.nodeId === 'string' ? record.nodeId.trim() : ''
+  if (nodeId.length === 0) {
+    throw new Error('Invalid nodeId payload for persistence:read-node-scrollback')
+  }
+
+  return { nodeId }
+}
+
+export function normalizeWriteNodeScrollbackPayload(payload: unknown): WriteNodeScrollbackInput {
+  if (!payload || typeof payload !== 'object') {
+    throw new Error('Invalid payload for persistence:write-node-scrollback')
+  }
+
+  const record = payload as Record<string, unknown>
+  const nodeId = typeof record.nodeId === 'string' ? record.nodeId.trim() : ''
+  if (nodeId.length === 0) {
+    throw new Error('Invalid nodeId payload for persistence:write-node-scrollback')
+  }
+
+  const scrollback =
+    record.scrollback === null
+      ? null
+      : typeof record.scrollback === 'string'
+        ? record.scrollback
+        : null
+
+  return { nodeId, scrollback }
 }
