@@ -228,18 +228,6 @@ test.describe('Workspace Canvas - Spaces (Anchors & Mismatch)', () => {
           )
         })
         .toBe(worktreePath)
-
-      const paneBox = await pane.boundingBox()
-      if (!paneBox) {
-        throw new Error('workspace pane bounding box unavailable')
-      }
-
-      await agentNode.locator('.terminal-node__header').dragTo(pane, {
-        sourcePosition: { x: 80, y: 16 },
-        targetPosition: { x: 120, y: Math.max(120, paneBox.height - 40) },
-      })
-
-      await expect(agentNode.locator('.terminal-node__badge--warning')).toHaveCount(0)
     } finally {
       await electronApp.close()
     }

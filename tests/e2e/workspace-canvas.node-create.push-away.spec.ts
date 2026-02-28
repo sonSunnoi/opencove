@@ -75,6 +75,7 @@ test.describe('Workspace Canvas - Node Create (Push-away)', () => {
         if (
           !created?.position ||
           typeof created.position.x !== 'number' ||
+          typeof created.width !== 'number' ||
           !existing?.position ||
           typeof existing.position.x !== 'number'
         ) {
@@ -83,6 +84,7 @@ test.describe('Workspace Canvas - Node Create (Push-away)', () => {
 
         return {
           createdX: created.position.x,
+          createdWidth: created.width,
           existingX: existing.position.x,
         }
       }, storageKey)
@@ -92,7 +94,7 @@ test.describe('Workspace Canvas - Node Create (Push-away)', () => {
       }
 
       expect(snapshot.createdX).toBe(280)
-      expect(snapshot.existingX).toBeGreaterThanOrEqual(280 + 460)
+      expect(snapshot.existingX).toBeGreaterThanOrEqual(snapshot.createdX + snapshot.createdWidth)
     } finally {
       await electronApp.close()
     }
