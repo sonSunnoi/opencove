@@ -104,6 +104,19 @@ export function resolveDefaultTerminalWindowSize(scalePercent: number): Size {
   }
 }
 
+export function resolveDefaultAgentWindowSize(
+  scalePercent: number,
+  viewport?: Partial<Size>,
+): Size {
+  const terminalSize = resolveDefaultTerminalWindowSize(scalePercent)
+  const taskSize = resolveDefaultTaskWindowSize(viewport)
+
+  return {
+    width: terminalSize.width,
+    height: taskSize.height,
+  }
+}
+
 export const TASK_PRIORITY_OPTIONS: Array<{ value: TaskPriority; label: string }> = [
   { value: 'low', label: 'Low' },
   { value: 'medium', label: 'Medium' },

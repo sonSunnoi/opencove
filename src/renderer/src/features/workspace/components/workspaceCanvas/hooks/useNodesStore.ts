@@ -6,6 +6,7 @@ import { findNearestFreePosition } from '../../../utils/collision'
 import { scheduleNodeScrollbackWrite } from '../../../utils/persistence/scrollbackSchedule'
 import {
   MIN_SIZE,
+  resolveDefaultAgentWindowSize,
   resolveDefaultTaskWindowSize,
   resolveDefaultTerminalWindowSize,
 } from '../constants'
@@ -307,7 +308,10 @@ export function useWorkspaceCanvasNodesStore({
       executionDirectory,
       expectedDirectory,
     }: CreateNodeInput): Promise<Node<TerminalNodeData> | null> => {
-      const defaultSize = resolveDefaultTerminalWindowSize(defaultTerminalWindowScalePercent)
+      const defaultSize =
+        kind === 'agent'
+          ? resolveDefaultAgentWindowSize(defaultTerminalWindowScalePercent)
+          : resolveDefaultTerminalWindowSize(defaultTerminalWindowScalePercent)
 
       const { placement, canPlace } = resolveNodesPlacement({
         anchor,

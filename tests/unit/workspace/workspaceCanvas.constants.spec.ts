@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   DEFAULT_TASK_WINDOW_MAX_SIZE,
+  resolveDefaultAgentWindowSize,
   resolveDefaultTerminalWindowSize,
   resolveDefaultTaskWindowSize,
   DEFAULT_TERMINAL_WINDOW_BASE_SIZE,
@@ -43,5 +44,16 @@ describe('workspace canvas default task sizing', () => {
     const size = resolveDefaultTaskWindowSize({ width: 6000, height: 3000 })
 
     expect(size).toEqual(DEFAULT_TASK_WINDOW_MAX_SIZE)
+  })
+})
+
+describe('workspace canvas default agent sizing', () => {
+  it('matches task default height while keeping terminal default width', () => {
+    const size = resolveDefaultAgentWindowSize(80, { width: 1920, height: 1080 })
+
+    expect(size).toEqual({
+      width: Math.round((DEFAULT_TERMINAL_WINDOW_BASE_SIZE.width * 80) / 100),
+      height: resolveDefaultTaskWindowSize({ width: 1920, height: 1080 }).height,
+    })
   })
 })
