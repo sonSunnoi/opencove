@@ -71,7 +71,7 @@ Download `.dmg` / `.zip` from GitHub Releases.
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/cove.git
+git clone https://github.com/deadwavewave/cove.git
 
 # Install dependencies
 pnpm install

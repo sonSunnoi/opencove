@@ -70,7 +70,7 @@ Cove 目前处于 Alpha 阶段，建议开发者尝鲜。
 
 ```bash
 # 克隆仓库
-git clone https://github.com/your-username/cove.git
+git clone https://github.com/deadwavewave/cove.git
 
 # 安装依赖
 pnpm install
