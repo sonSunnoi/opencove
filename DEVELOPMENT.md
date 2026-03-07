@@ -99,7 +99,7 @@
 ## 文档地图（按问题找入口）
 
 -   **Agent 行为准则与详细工作流**：`AGENTS.md` (The Single Source of Truth for Agents)
--   **架构标准（Clean + Feature-First）**：`docs/ARCHITECTURE.md`
+-   **架构标准（DDD + Clean）**：`docs/ARCHITECTURE.md`
 -   **持久化（SQLite schema / migrations）**：`docs/PERSISTENCE.md`
 -   **UI 开发标准**：
     -   窗口 UI 标准：`docs/WINDOW_UI_STANDARD.md`
