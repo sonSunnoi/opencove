@@ -1,6 +1,7 @@
 import type { AgentRuntimeStatus, WorkspaceNodeKind } from '../types'
 
 export interface TerminalNodeProps {
+  nodeId: string
   sessionId: string
   title: string
   kind: WorkspaceNodeKind

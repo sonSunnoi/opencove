@@ -1,6 +1,7 @@
 import { useCallback, type MutableRefObject } from 'react'
 import type { Node } from '@xyflow/react'
 import type { AgentNodeData, TerminalNodeData } from '../../../types'
+import { invalidateCachedTerminalScreenState } from '../../terminalNode/screenStateCache'
 import { providerTitlePrefix, toErrorMessage } from '../helpers'
 import { resolveInitialAgentRuntimeStatus } from '../../../utils/agentRuntimeStatus'
 
@@ -76,6 +77,7 @@ export function useWorkspaceCanvasAgentNodeLifecycle({
       }
 
       if (node.data.sessionId.length > 0) {
+        invalidateCachedTerminalScreenState(nodeId, node.data.sessionId)
         await window.coveApi.pty.kill({ sessionId: node.data.sessionId })
 
         if (!isAgentLaunchTokenCurrent(nodeId, launchToken)) {
@@ -206,6 +208,7 @@ export function useWorkspaceCanvasAgentNodeLifecycle({
       bumpAgentLaunchToken(nodeId)
 
       if (node.data.sessionId.length > 0) {
+        invalidateCachedTerminalScreenState(nodeId, node.data.sessionId)
         await window.coveApi.pty.kill({ sessionId: node.data.sessionId })
       }
 

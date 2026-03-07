@@ -15,6 +15,7 @@ import { useProviderModelCatalog } from './hooks/useProviderModelCatalog'
 import type { ProjectContextMenuState } from './types'
 import { useAppStore } from './store/useAppStore'
 import { createDefaultWorkspaceViewport, sanitizeWorkspaceSpaces } from './utils/workspaceSpaces'
+import { invalidateCachedTerminalScreenState } from '../features/workspace/components/terminalNode/screenStateCache'
 
 export default function App(): React.JSX.Element {
   const {
@@ -277,6 +278,12 @@ export default function App(): React.JSX.Element {
     }
 
     try {
+      targetWorkspace.nodes.forEach(node => {
+        if (node.data.sessionId.length > 0) {
+          invalidateCachedTerminalScreenState(node.id, node.data.sessionId)
+        }
+      })
+
       await Promise.allSettled(
         targetWorkspace.nodes
           .map(node => node.data.sessionId)

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
 import { Handle, Position } from '@xyflow/react'
+import { SerializeAddon } from '@xterm/addon-serialize'
 import { Terminal } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
@@ -11,7 +12,11 @@ import {
   parseTerminalCommandInput,
 } from './terminalNode/commandInput'
 import { createPtyWriteQueue, registerXtermPasteGuards } from './terminalNode/inputBridge'
-import { mergeScrollbackSnapshots } from './terminalNode/scrollback'
+import { mergeScrollbackSnapshots, resolveScrollbackDelta } from './terminalNode/scrollback'
+import {
+  getCachedTerminalScreenState,
+  setCachedTerminalScreenState,
+} from './terminalNode/screenStateCache'
 import { TerminalNodeHeader } from './terminalNode/TerminalNodeHeader'
 import { resolveSuffixPrefixOverlap } from './terminalNode/overlap'
 import { useTerminalResize } from './terminalNode/useTerminalResize'
@@ -20,6 +25,7 @@ import { shouldStopWheelPropagation } from './terminalNode/wheel'
 import type { TerminalNodeProps } from './TerminalNode.types'
 
 export function TerminalNode({
+  nodeId,
   sessionId,
   title,
   kind,
@@ -44,6 +50,7 @@ export function TerminalNode({
   const lastSyncedPtySizeRef = useRef<{ cols: number; rows: number } | null>(null)
   const commandInputStateRef = useRef(createTerminalCommandInputState())
   const onCommandRunRef = useRef(onCommandRun)
+  const isTerminalHydratedRef = useRef(false)
   const [isTerminalHydrated, setIsTerminalHydrated] = useState(false)
 
   useEffect(() => {
@@ -65,6 +72,7 @@ export function TerminalNode({
   useEffect(() => {
     lastSyncedPtySizeRef.current = null
     commandInputStateRef.current = createTerminalCommandInputState()
+    isTerminalHydratedRef.current = false
     setIsTerminalHydrated(false)
   }, [sessionId])
 
@@ -133,6 +141,9 @@ export function TerminalNode({
       detach?: (payload: { sessionId: string }) => Promise<void>
     }
 
+    const cachedScreenState = getCachedTerminalScreenState(nodeId, sessionId)
+    const scrollbackBuffer = scrollbackBufferRef.current
+
     const terminal = new Terminal({
       cursorBlink: true,
       fontFamily:
@@ -144,10 +155,14 @@ export function TerminalNode({
       allowProposedApi: true,
       convertEol: true,
       scrollback: 5000,
+      cols: cachedScreenState?.cols,
+      rows: cachedScreenState?.rows,
     })
 
     const fitAddon = new FitAddon()
+    const serializeAddon = new SerializeAddon()
     terminal.loadAddon(fitAddon)
+    terminal.loadAddon(serializeAddon)
 
     terminalRef.current = terminal
     fitAddonRef.current = fitAddon
@@ -222,7 +237,7 @@ export function TerminalNode({
       }
 
       terminal.write(event.data)
-      scrollbackBufferRef.current.append(event.data)
+      scrollbackBuffer.append(event.data)
       markScrollbackDirty()
     })
 
@@ -238,18 +253,18 @@ export function TerminalNode({
 
       const exitMessage = `\\r\\n[process exited with code ${event.exitCode}]\\r\\n`
       terminal.write(exitMessage)
-      scrollbackBufferRef.current.append(exitMessage)
+      scrollbackBuffer.append(exitMessage)
       markScrollbackDirty(true)
     })
 
     const attachPromise = Promise.resolve(ptyWithOptionalAttach.attach?.({ sessionId }))
 
-    const finalizeHydration = (snapshot: string): void => {
+    const finalizeHydration = (rawSnapshot: string): void => {
       if (isDisposed) {
         return
       }
 
-      scrollbackBufferRef.current.set(snapshot)
+      scrollbackBuffer.set(rawSnapshot)
       isHydrating = false
       ptyWriteQueue.flush()
 
@@ -258,6 +273,7 @@ export function TerminalNode({
           syncTerminalSize()
           requestAnimationFrame(() => {
             if (!isDisposed) {
+              isTerminalHydratedRef.current = true
               setIsTerminalHydrated(true)
             }
           })
@@ -268,12 +284,12 @@ export function TerminalNode({
       bufferedDataChunks.length = 0
 
       if (bufferedData.length > 0) {
-        const overlap = resolveSuffixPrefixOverlap(snapshot, bufferedData)
+        const overlap = resolveSuffixPrefixOverlap(rawSnapshot, bufferedData)
         const remainder = bufferedData.slice(overlap)
 
         if (remainder.length > 0) {
           terminal.write(remainder)
-          scrollbackBufferRef.current.append(remainder)
+          scrollbackBuffer.append(remainder)
         }
       }
 
@@ -281,7 +297,7 @@ export function TerminalNode({
         const exitMessage = `\\r\\n[process exited with code ${bufferedExitCode}]\\r\\n`
         bufferedExitCode = null
         terminal.write(exitMessage)
-        scrollbackBufferRef.current.append(exitMessage)
+        scrollbackBuffer.append(exitMessage)
       }
 
       markScrollbackDirty(true)
@@ -291,28 +307,41 @@ export function TerminalNode({
     const hydrateFromSnapshot = async () => {
       await attachPromise.catch(() => undefined)
 
-      const persistedSnapshot = scrollbackBufferRef.current.snapshot()
-      let mergedSnapshot = persistedSnapshot
+      const persistedSnapshot = scrollbackBuffer.snapshot()
+      const cachedSerializedScreen = cachedScreenState?.serialized ?? ''
+      const baseRawSnapshot =
+        cachedScreenState && cachedScreenState.rawSnapshot.length > 0
+          ? cachedScreenState.rawSnapshot
+          : persistedSnapshot
+      let restoredPayload =
+        cachedSerializedScreen.length > 0 ? cachedSerializedScreen : persistedSnapshot
+      let rawSnapshot = baseRawSnapshot
 
       try {
         const snapshot = await window.coveApi.pty.snapshot({ sessionId })
-        mergedSnapshot = mergeScrollbackSnapshots(persistedSnapshot, snapshot.data)
+        if (cachedSerializedScreen.length > 0) {
+          restoredPayload = `${cachedSerializedScreen}${resolveScrollbackDelta(baseRawSnapshot, snapshot.data)}`
+          rawSnapshot = mergeScrollbackSnapshots(baseRawSnapshot, snapshot.data)
+        } else {
+          rawSnapshot = mergeScrollbackSnapshots(persistedSnapshot, snapshot.data)
+          restoredPayload = rawSnapshot
+        }
       } catch {
-        // ignore snapshot read failures and continue with available persisted history
+        rawSnapshot = baseRawSnapshot
       }
 
       if (isDisposed) {
         return
       }
 
-      if (mergedSnapshot.length > 0) {
-        terminal.write(mergedSnapshot, () => {
+      if (restoredPayload.length > 0) {
+        terminal.write(restoredPayload, () => {
           shouldForwardTerminalData = true
-          finalizeHydration(mergedSnapshot)
+          finalizeHydration(rawSnapshot)
         })
       } else {
         shouldForwardTerminalData = true
-        finalizeHydration(mergedSnapshot)
+        finalizeHydration(rawSnapshot)
       }
     }
 
@@ -345,6 +374,19 @@ export function TerminalNode({
     window.addEventListener(TERMINAL_LAYOUT_SYNC_EVENT, handleLayoutSync)
 
     return () => {
+      if (isTerminalHydratedRef.current) {
+        const serializedScreen = serializeAddon.serialize()
+        if (serializedScreen.length > 0) {
+          setCachedTerminalScreenState(nodeId, {
+            sessionId,
+            serialized: serializedScreen,
+            rawSnapshot: scrollbackBuffer.snapshot(),
+            cols: terminal.cols,
+            rows: terminal.rows,
+          })
+        }
+      }
+
       isDisposed = true
       const detachPromise = ptyWithOptionalAttach.detach?.({ sessionId })
       void detachPromise?.catch(() => undefined)
@@ -363,6 +405,7 @@ export function TerminalNode({
       fitAddonRef.current = null
     }
   }, [
+    nodeId,
     disposeScrollbackPublish,
     markScrollbackDirty,
     scrollbackBufferRef,

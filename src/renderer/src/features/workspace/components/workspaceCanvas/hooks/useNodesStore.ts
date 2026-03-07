@@ -2,6 +2,7 @@ import { useCallback, useLayoutEffect, useRef } from 'react'
 import type { Node } from '@xyflow/react'
 import type { Point, Size, TerminalNodeData, TaskPriority } from '../../../types'
 import { useScrollbackStore } from '../../../store/useScrollbackStore'
+import { invalidateCachedTerminalScreenState } from '../../terminalNode/screenStateCache'
 import { findNearestFreePosition } from '../../../utils/collision'
 import { scheduleNodeScrollbackWrite } from '../../../utils/persistence/scrollbackSchedule'
 import { resolveInitialAgentRuntimeStatus } from '../../../utils/agentRuntimeStatus'
@@ -81,6 +82,7 @@ export function useWorkspaceCanvasNodesStore({
 
       const target = nodesRef.current.find(node => node.id === nodeId)
       if (target && target.data.sessionId.length > 0) {
+        invalidateCachedTerminalScreenState(nodeId, target.data.sessionId)
         await window.coveApi.pty.kill({ sessionId: target.data.sessionId })
       }
 

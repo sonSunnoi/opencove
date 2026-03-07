@@ -39,6 +39,7 @@ function TerminalNodeType({
 
   return (
     <TerminalNode
+      nodeId={id}
       sessionId={data.sessionId}
       title={data.title}
       kind={data.kind}

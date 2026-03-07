@@ -1,6 +1,10 @@
 import React from 'react'
 import { render, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  clearCachedTerminalScreenStates,
+  setCachedTerminalScreenState,
+} from '../../../src/renderer/src/features/workspace/components/terminalNode/screenStateCache'
 
 type DataEvent = { sessionId: string; data: string }
 type ExitEvent = { sessionId: string; exitCode: number }
@@ -33,11 +37,15 @@ vi.mock('@xterm/xterm', () => {
     public written: string[] = []
     private dataListener: ((data: string) => void) | null = null
 
-    public constructor() {
+    public constructor(options?: { cols?: number; rows?: number }) {
       MockTerminal.lastInstance = this
+      this.cols = options?.cols ?? 80
+      this.rows = options?.rows ?? 24
     }
 
-    public loadAddon(): void {}
+    public loadAddon(addon: { activate?: (terminal: MockTerminal) => void }): void {
+      addon.activate?.(this)
+    }
 
     public open(): void {}
 
@@ -78,6 +86,20 @@ vi.mock('@xterm/addon-fit', () => {
   return { FitAddon: MockFitAddon }
 })
 
+vi.mock('@xterm/addon-serialize', () => {
+  class MockSerializeAddon {
+    public activate(): void {}
+
+    public serialize(): string {
+      return '[mock-serialized]'
+    }
+
+    public dispose(): void {}
+  }
+
+  return { SerializeAddon: MockSerializeAddon }
+})
+
 vi.mock('@xyflow/react', () => {
   return {
     Handle: () => null,
@@ -89,6 +111,10 @@ vi.mock('@xyflow/react', () => {
 })
 
 describe('TerminalNode hydration buffering', () => {
+  beforeEach(() => {
+    clearCachedTerminalScreenStates()
+  })
+
   it('subscribes before attach and flushes buffered output without duplication', async () => {
     if (typeof window.ResizeObserver === 'undefined') {
       window.ResizeObserver = class ResizeObserver {
@@ -141,6 +167,7 @@ describe('TerminalNode hydration buffering', () => {
 
     const { container } = render(
       <TerminalNode
+        nodeId="node-1"
         sessionId="session-1"
         title="t"
         kind="terminal"
@@ -194,5 +221,69 @@ describe('TerminalNode hydration buffering', () => {
         'after',
       ])
     })
+  })
+
+  it('restores cached serialized screen before applying live delta', async () => {
+    if (typeof window.ResizeObserver === 'undefined') {
+      window.ResizeObserver = class ResizeObserver {
+        public observe(): void {}
+        public disconnect(): void {}
+        public unobserve(): void {}
+      }
+    }
+
+    setCachedTerminalScreenState('node-1', {
+      sessionId: 'session-1',
+      serialized: 'SERIALIZED_SCREEN',
+      rawSnapshot: 'hello',
+      cols: 92,
+      rows: 28,
+    })
+
+    Object.defineProperty(window, 'coveApi', {
+      configurable: true,
+      writable: true,
+      value: {
+        meta: {
+          isTest: true,
+        },
+        pty: {
+          attach: vi.fn(async () => undefined),
+          detach: vi.fn(async () => undefined),
+          snapshot: vi.fn(async () => ({ data: 'hello!!' })),
+          onData: vi.fn(() => () => undefined),
+          onExit: vi.fn(() => () => undefined),
+          write: vi.fn(async () => undefined),
+          resize: vi.fn(async () => undefined),
+        },
+      },
+    })
+
+    const { TerminalNode } =
+      await import('../../../src/renderer/src/features/workspace/components/TerminalNode')
+
+    render(
+      <TerminalNode
+        nodeId="node-1"
+        sessionId="session-1"
+        title="t"
+        kind="terminal"
+        status={null}
+        lastError={null}
+        width={520}
+        height={360}
+        terminalFontSize={13}
+        scrollback={null}
+        onClose={() => undefined}
+        onResize={() => undefined}
+      />,
+    )
+
+    const { __getLastTerminal } = await import('@xterm/xterm')
+    await waitFor(() => {
+      expect(__getLastTerminal()?.written).toEqual(['SERIALIZED_SCREEN!!'])
+    })
+    expect(__getLastTerminal()?.cols).toBe(92)
+    expect(__getLastTerminal()?.rows).toBe(28)
   })
 })

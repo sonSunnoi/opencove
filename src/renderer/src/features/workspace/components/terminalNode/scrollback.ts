@@ -1,4 +1,5 @@
-import { MAX_OVERLAP_PROBE_CHARS, MAX_SCROLLBACK_CHARS } from './constants'
+import { MAX_SCROLLBACK_CHARS } from './constants'
+import { resolveSuffixPrefixOverlap } from './overlap'
 
 export function truncateScrollback(snapshot: string): string {
   if (snapshot.length <= MAX_SCROLLBACK_CHARS) {
@@ -8,16 +9,24 @@ export function truncateScrollback(snapshot: string): string {
   return snapshot.slice(-MAX_SCROLLBACK_CHARS)
 }
 
-function calculateSuffixPrefixOverlap(left: string, right: string): number {
-  const maxLength = Math.min(left.length, right.length, MAX_OVERLAP_PROBE_CHARS)
+export function resolveScrollbackDelta(previous: string, next: string): string {
+  const previousSnapshot = truncateScrollback(previous)
+  const nextSnapshot = truncateScrollback(next)
 
-  for (let size = maxLength; size > 0; size -= 1) {
-    if (left.slice(-size) === right.slice(0, size)) {
-      return size
-    }
+  if (previousSnapshot.length === 0) {
+    return nextSnapshot
   }
 
-  return 0
+  if (nextSnapshot.length === 0 || previousSnapshot === nextSnapshot) {
+    return ''
+  }
+
+  if (previousSnapshot.includes(nextSnapshot)) {
+    return ''
+  }
+
+  const overlap = resolveSuffixPrefixOverlap(previousSnapshot, nextSnapshot)
+  return nextSnapshot.slice(overlap)
 }
 
 export function mergeScrollbackSnapshots(persisted: string, live: string): string {
@@ -44,6 +53,6 @@ export function mergeScrollbackSnapshots(persisted: string, live: string): strin
     return persistedSnapshot
   }
 
-  const overlap = calculateSuffixPrefixOverlap(persistedSnapshot, liveSnapshot)
+  const overlap = resolveSuffixPrefixOverlap(persistedSnapshot, liveSnapshot)
   return truncateScrollback(`${persistedSnapshot}${liveSnapshot.slice(overlap)}`)
 }
