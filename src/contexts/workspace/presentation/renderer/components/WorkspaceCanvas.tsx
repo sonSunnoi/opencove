@@ -234,6 +234,7 @@ function WorkspaceCanvasInner({
     return agentSettings.canvasInputMode
   }, [agentSettings.canvasInputMode, detectedCanvasInputMode])
   const isTrackpadCanvasMode = resolvedCanvasInputMode === 'trackpad'
+  const useManualCanvasWheelGestures = agentSettings.canvasInputMode !== 'mouse'
   const { handleCanvasWheelCapture } = workspaceCanvasHooks.useWorkspaceCanvasTrackpadGestures({
     canvasInputModeSetting: agentSettings.canvasInputMode,
     resolvedCanvasInputMode,
@@ -415,6 +416,7 @@ function WorkspaceCanvasInner({
       onMoveEnd={handleViewportMoveEnd}
       viewport={viewport}
       isTrackpadCanvasMode={isTrackpadCanvasMode}
+      useManualCanvasWheelGestures={useManualCanvasWheelGestures}
       isShiftPressed={isShiftPressed}
       selectionDraft={selectionDraftUi}
       spaceVisuals={spaceVisuals}

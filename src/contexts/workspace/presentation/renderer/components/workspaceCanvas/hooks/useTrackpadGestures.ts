@@ -1,20 +1,13 @@
 import { useCallback, type MutableRefObject } from 'react'
-import type { Viewport } from '@xyflow/react'
-import type { ReactFlowInstance } from '@xyflow/react'
-import {
-  inferCanvasInputModalityFromWheel,
-  type CanvasInputModalityState,
-  type DetectedCanvasInputMode,
+import type { ReactFlowInstance, Viewport } from '@xyflow/react'
+import type {
+  CanvasInputModalityState,
+  DetectedCanvasInputMode,
 } from '../../../utils/inputModality'
-import {
-  MAX_CANVAS_ZOOM,
-  MIN_CANVAS_ZOOM,
-  TRACKPAD_GESTURE_LOCK_GAP_MS,
-  TRACKPAD_PAN_SCROLL_SPEED,
-  TRACKPAD_PINCH_SENSITIVITY,
-} from '../constants'
-import { clampNumber, resolveWheelAction, resolveWheelTarget } from '../helpers'
+import { MAX_CANVAS_ZOOM, MIN_CANVAS_ZOOM, TRACKPAD_PAN_SCROLL_SPEED } from '../constants'
+import { clampNumber, resolveWheelTarget } from '../helpers'
 import type { TrackpadGestureLockState } from '../types'
+import { resolveCanvasWheelGesture } from '../wheelGestures'
 
 interface UseTrackpadGesturesParams {
   canvasInputModeSetting: 'mouse' | 'trackpad' | 'auto'
@@ -26,6 +19,35 @@ interface UseTrackpadGesturesParams {
   viewportRef: MutableRefObject<Viewport>
   reactFlow: ReactFlowInstance
   onViewportChange: (viewport: { x: number; y: number; zoom: number }) => void
+}
+
+function isMacLikePlatform(): boolean {
+  if (typeof navigator === 'undefined') {
+    return false
+  }
+
+  const platform =
+    (typeof navigator.userAgentData?.platform === 'string' && navigator.userAgentData.platform) ||
+    navigator.platform ||
+    ''
+
+  return platform.toLowerCase().includes('mac')
+}
+
+function resolveWheelZoomDelta(event: WheelEvent): number {
+  const factor = event.ctrlKey && isMacLikePlatform() ? 10 : 1
+  return -event.deltaY * (event.deltaMode === 1 ? 0.05 : event.deltaMode ? 1 : 0.002) * factor
+}
+
+function applyViewport(
+  nextViewport: Viewport,
+  viewportRef: MutableRefObject<Viewport>,
+  reactFlow: ReactFlowInstance,
+  onViewportChange: (viewport: { x: number; y: number; zoom: number }) => void,
+): void {
+  viewportRef.current = nextViewport
+  reactFlow.setViewport(nextViewport, { duration: 0 })
+  onViewportChange(nextViewport)
 }
 
 export function useWorkspaceCanvasTrackpadGestures({
@@ -41,66 +63,43 @@ export function useWorkspaceCanvasTrackpadGestures({
 }: UseTrackpadGesturesParams): { handleCanvasWheelCapture: (event: WheelEvent) => void } {
   const handleCanvasWheelCapture = useCallback(
     (event: WheelEvent) => {
-      let effectiveMode = resolvedCanvasInputMode
       const wheelTarget = resolveWheelTarget(event.target)
+      const canvasElement = canvasRef.current
+      const isTargetWithinCanvas =
+        canvasElement !== null &&
+        event.target instanceof Node &&
+        canvasElement.contains(event.target)
+      const lockTimestamp =
+        Number.isFinite(event.timeStamp) && event.timeStamp >= 0
+          ? event.timeStamp
+          : performance.now()
 
-      if (canvasInputModeSetting === 'auto' && (wheelTarget === 'canvas' || event.ctrlKey)) {
-        const nextState = inferCanvasInputModalityFromWheel(inputModalityStateRef.current, {
+      const decision = resolveCanvasWheelGesture({
+        canvasInputModeSetting,
+        resolvedCanvasInputMode,
+        inputModalityState: inputModalityStateRef.current,
+        trackpadGestureLock: trackpadGestureLockRef.current,
+        wheelTarget,
+        isTargetWithinCanvas,
+        sample: {
           deltaX: event.deltaX,
           deltaY: event.deltaY,
           deltaMode: event.deltaMode,
           ctrlKey: event.ctrlKey,
           timeStamp: event.timeStamp,
-        })
+        },
+        lockTimestamp,
+      })
 
-        inputModalityStateRef.current = nextState
-        setDetectedCanvasInputMode(previous =>
-          previous === nextState.mode ? previous : nextState.mode,
-        )
-        effectiveMode = nextState.mode
-      }
+      inputModalityStateRef.current = decision.nextInputModalityState
+      setDetectedCanvasInputMode(previous =>
+        previous === decision.nextDetectedCanvasInputMode
+          ? previous
+          : decision.nextDetectedCanvasInputMode,
+      )
+      trackpadGestureLockRef.current = decision.nextTrackpadGestureLock
 
-      if (effectiveMode !== 'trackpad') {
-        trackpadGestureLockRef.current = null
-        return
-      }
-
-      const action = resolveWheelAction(event.ctrlKey)
-      const lockTimestamp = performance.now()
-      const activeLock = trackpadGestureLockRef.current
-      const previousLock =
-        activeLock !== null &&
-        lockTimestamp - activeLock.lastTimestamp <= TRACKPAD_GESTURE_LOCK_GAP_MS
-          ? activeLock
-          : null
-
-      if (activeLock !== null && previousLock === null) {
-        trackpadGestureLockRef.current = null
-      }
-
-      const canvasElement = canvasRef.current
-      const isEventFromCanvas =
-        canvasElement !== null &&
-        event.target instanceof Node &&
-        canvasElement.contains(event.target)
-      const canContinueCanvasLock =
-        previousLock !== null && previousLock.action === action && previousLock.target === 'canvas'
-
-      if (!isEventFromCanvas && !canContinueCanvasLock) {
-        return
-      }
-
-      const target = isEventFromCanvas ? wheelTarget : 'canvas'
-      const isContinuousGesture = previousLock !== null && previousLock.action === action
-      const lockedTarget = isContinuousGesture ? previousLock.target : target
-
-      trackpadGestureLockRef.current = {
-        action,
-        target: lockedTarget,
-        lastTimestamp: lockTimestamp,
-      }
-
-      if (lockedTarget !== 'canvas') {
+      if (decision.canvasAction === null) {
         return
       }
 
@@ -109,22 +108,28 @@ export function useWorkspaceCanvasTrackpadGestures({
 
       const currentViewport = viewportRef.current
 
-      if (action === 'pan') {
+      if (decision.canvasAction === 'pan') {
+        const deltaNormalize = event.deltaMode === 1 ? 20 : 1
+        let deltaX = event.deltaX * deltaNormalize
+        let deltaY = event.deltaY * deltaNormalize
+
+        if (!isMacLikePlatform() && event.shiftKey) {
+          deltaX = event.deltaY * deltaNormalize
+          deltaY = 0
+        }
+
         const nextViewport = {
-          x: currentViewport.x - event.deltaX * TRACKPAD_PAN_SCROLL_SPEED,
-          y: currentViewport.y - event.deltaY * TRACKPAD_PAN_SCROLL_SPEED,
+          x: currentViewport.x - (deltaX / currentViewport.zoom) * TRACKPAD_PAN_SCROLL_SPEED,
+          y: currentViewport.y - (deltaY / currentViewport.zoom) * TRACKPAD_PAN_SCROLL_SPEED,
           zoom: currentViewport.zoom,
         }
 
-        viewportRef.current = nextViewport
-        reactFlow.setViewport(nextViewport, { duration: 0 })
-        onViewportChange(nextViewport)
+        applyViewport(nextViewport, viewportRef, reactFlow, onViewportChange)
         return
       }
 
-      const zoomFactor = Math.exp(-event.deltaY * TRACKPAD_PINCH_SENSITIVITY)
       const nextZoom = clampNumber(
-        currentViewport.zoom * zoomFactor,
+        currentViewport.zoom * Math.pow(2, resolveWheelZoomDelta(event)),
         MIN_CANVAS_ZOOM,
         MAX_CANVAS_ZOOM,
       )
@@ -154,9 +159,7 @@ export function useWorkspaceCanvasTrackpadGestures({
         zoom: nextZoom,
       }
 
-      viewportRef.current = nextViewport
-      reactFlow.setViewport(nextViewport, { duration: 0 })
-      onViewportChange(nextViewport)
+      applyViewport(nextViewport, viewportRef, reactFlow, onViewportChange)
     },
     [
       canvasInputModeSetting,

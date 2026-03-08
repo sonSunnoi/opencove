@@ -73,6 +73,7 @@ interface WorkspaceCanvasViewProps {
   onMoveEnd: (_event: MouseEvent | TouchEvent | null, nextViewport: Viewport) => void
   viewport: Viewport
   isTrackpadCanvasMode: boolean
+  useManualCanvasWheelGestures: boolean
   isShiftPressed: boolean
   selectionDraft: SelectionDraftUiState | null
 
@@ -198,6 +199,7 @@ export function WorkspaceCanvasView({
   onMoveEnd,
   viewport,
   isTrackpadCanvasMode,
+  useManualCanvasWheelGestures,
   isShiftPressed,
   selectionDraft,
   spaceVisuals,
@@ -326,10 +328,10 @@ export function WorkspaceCanvasView({
         nodesDraggable
         elementsSelectable
         panOnDrag={isTrackpadCanvasMode ? false : !isShiftPressed}
-        zoomOnScroll={!isTrackpadCanvasMode}
+        zoomOnScroll={!useManualCanvasWheelGestures}
         panOnScroll={false}
         panOnScrollMode={PanOnScrollMode.Free}
-        zoomOnPinch={!isTrackpadCanvasMode}
+        zoomOnPinch={!useManualCanvasWheelGestures}
         zoomOnDoubleClick={false}
         defaultViewport={viewport}
         minZoom={MIN_CANVAS_ZOOM}

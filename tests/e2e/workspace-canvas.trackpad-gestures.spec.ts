@@ -1,6 +1,35 @@
 import { expect, test } from '@playwright/test'
 import { clearAndSeedWorkspace, launchApp, readCanvasViewport } from './workspace-canvas.helpers'
 
+type WorkspaceWindow = Awaited<ReturnType<typeof launchApp>>['window']
+
+async function readResolvedCanvasInputMode(window: WorkspaceWindow): Promise<string | null> {
+  return await window.locator('.workspace-canvas').getAttribute('data-canvas-input-mode')
+}
+
+async function dispatchCanvasWheel(
+  window: WorkspaceWindow,
+  eventInit: Partial<WheelEventInit>,
+): Promise<void> {
+  await window.evaluate(event => {
+    const paneElement = document.querySelector('.workspace-canvas .react-flow__pane')
+    if (!(paneElement instanceof HTMLElement)) {
+      return
+    }
+
+    paneElement.dispatchEvent(
+      new WheelEvent('wheel', {
+        deltaX: 0,
+        deltaY: 0,
+        deltaMode: 0,
+        bubbles: true,
+        cancelable: true,
+        ...event,
+      }),
+    )
+  }, eventInit)
+}
+
 test.describe('Workspace Canvas - Trackpad Gestures', () => {
   test('auto mode switches to trackpad interaction after gesture-like wheel input', async () => {
     const { electronApp, window } = await launchApp()
@@ -50,6 +79,45 @@ test.describe('Workspace Canvas - Trackpad Gestures', () => {
       })
 
       await expect(window.locator('.react-flow__node.selected')).toHaveCount(1)
+    } finally {
+      await electronApp.close()
+    }
+  })
+
+  test('auto mode pans canvas on gesture-like scroll input', async () => {
+    const { electronApp, window } = await launchApp()
+
+    try {
+      await clearAndSeedWorkspace(window, [
+        {
+          id: 'auto-trackpad-pan-node',
+          title: 'terminal-auto-trackpad-pan',
+          position: { x: 320, y: 220 },
+          width: 460,
+          height: 300,
+        },
+      ])
+
+      const pane = window.locator('.workspace-canvas .react-flow__pane')
+      const canvas = window.locator('.workspace-canvas')
+      await expect(pane).toBeVisible()
+      await expect(canvas).toHaveAttribute('data-canvas-input-mode', 'mouse')
+
+      const before = await readCanvasViewport(window)
+
+      await dispatchCanvasWheel(window, {
+        deltaX: 6.5,
+        deltaY: 9.25,
+        deltaMode: 0,
+      })
+
+      await expect(canvas).toHaveAttribute('data-canvas-input-mode', 'trackpad')
+      await expect
+        .poll(async () => {
+          const current = await readCanvasViewport(window)
+          return Math.hypot(current.x - before.x, current.y - before.y)
+        })
+        .toBeGreaterThan(4)
     } finally {
       await electronApp.close()
     }
@@ -173,6 +241,60 @@ test.describe('Workspace Canvas - Trackpad Gestures', () => {
 
       const afterRows = await visibleRows.innerText()
       expect(afterRows).not.toBe(beforeRows)
+    } finally {
+      await electronApp.close()
+    }
+  })
+
+  test('auto mode keeps trackpad canvas behavior while mouse wheel scrolls terminal', async () => {
+    const { electronApp, window } = await launchApp()
+
+    try {
+      await clearAndSeedWorkspace(window, [
+        {
+          id: 'auto-terminal-wheel-scroll-node',
+          title: 'terminal-auto-terminal-wheel-scroll',
+          position: { x: 240, y: 200 },
+          width: 520,
+          height: 320,
+        },
+      ])
+
+      const pane = window.locator('.workspace-canvas .react-flow__pane')
+      const canvas = window.locator('.workspace-canvas')
+      const terminal = window.locator('.terminal-node').first()
+      await expect(pane).toBeVisible()
+      await expect(terminal).toBeVisible()
+
+      await dispatchCanvasWheel(window, {
+        deltaX: 0,
+        deltaY: 2,
+        deltaMode: 0,
+        ctrlKey: true,
+      })
+
+      await expect(canvas).toHaveAttribute('data-canvas-input-mode', 'trackpad')
+
+      const xterm = terminal.locator('.xterm')
+      await expect(xterm).toBeVisible()
+      await xterm.click()
+      const terminalInput = terminal.locator('.xterm-helper-textarea')
+      await expect(terminalInput).toBeFocused()
+      await window.keyboard.type('for i in $(seq 1 260); do echo AUTO_WHEEL_SCROLL_$i; done')
+      await window.keyboard.press('Enter')
+      await expect(terminal).toContainText('AUTO_WHEEL_SCROLL_260')
+
+      const visibleRows = terminal.locator('.xterm-rows')
+      const beforeRows = await visibleRows.innerText()
+
+      await terminal.hover()
+      await window.mouse.wheel(0, -900)
+      await window.waitForTimeout(120)
+
+      const afterRows = await visibleRows.innerText()
+      expect(afterRows).not.toBe(beforeRows)
+      await expect(canvas).toHaveAttribute('data-canvas-input-mode', 'trackpad')
+      expect(await readResolvedCanvasInputMode(window)).toBe('trackpad')
     } finally {
       await electronApp.close()
     }

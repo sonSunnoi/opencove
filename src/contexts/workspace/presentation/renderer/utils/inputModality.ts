@@ -1,10 +1,12 @@
 export type DetectedCanvasInputMode = 'mouse' | 'trackpad'
+export type ClassifiedWheelInputMode = DetectedCanvasInputMode | 'unknown'
 
 export interface CanvasInputModalityState {
   mode: DetectedCanvasInputMode
-  score: number
   lastEventTimestamp: number | null
-  modeLockUntilTimestamp: number | null
+  burstEventCount: number
+  gestureLikeEventCount: number
+  burstMode: ClassifiedWheelInputMode
 }
 
 export interface WheelInputSample {
@@ -15,17 +17,18 @@ export interface WheelInputSample {
   timeStamp: number
 }
 
-const SCORE_MIN = -16
-const SCORE_MAX = 16
-const TRACKPAD_SWITCH_THRESHOLD = 5
-const MOUSE_SWITCH_THRESHOLD = -5
-const STALE_EVENT_GAP_MS = 360
-const TRACKPAD_MODE_LOCK_MS = 1800
-const MOUSE_MODE_LOCK_MS = 900
-
-function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value))
+interface WheelAxisMetrics {
+  absX: number
+  absY: number
+  dominant: number
+  secondary: number
 }
+
+const TRACKPAD_BURST_GAP_MS = 220
+const TRACKPAD_BURST_SWITCH_EVENT_COUNT = 2
+const LARGE_SINGLE_AXIS_MOUSE_BURST = 64
+const STRONG_TRACKPAD_PIXEL_DELTA_MAX = 18
+const MOUSE_SINGLE_AXIS_DELTA_MIN = 24
 
 function hasFractionalDelta(value: number): boolean {
   if (!Number.isFinite(value)) {
@@ -37,7 +40,7 @@ function hasFractionalDelta(value: number): boolean {
 
 function isDiscreteWheelStep(value: number): boolean {
   const absolute = Math.abs(value)
-  if (absolute < 24) {
+  if (absolute < MOUSE_SINGLE_AXIS_DELTA_MIN) {
     return false
   }
 
@@ -63,65 +66,109 @@ function normalizeTimestamp(value: number, fallback: number | null): number {
   return fallback ?? 0
 }
 
-function computeTrackpadEvidence(sample: WheelInputSample, intervalMs: number | null): number {
-  if (sample.deltaMode === 1) {
-    return -6
-  }
-
-  if (sample.deltaMode === 2) {
-    return -7
-  }
-
+function resolveWheelAxisMetrics(sample: WheelInputSample): WheelAxisMetrics {
   const absX = Math.abs(sample.deltaX)
   const absY = Math.abs(sample.deltaY)
-  const magnitude = Math.hypot(absX, absY)
-  const hasBothAxes = absX > 0.01 && absY > 0.01
 
-  let evidence = 0
-
-  if (sample.ctrlKey) {
-    evidence += 7
+  return {
+    absX,
+    absY,
+    dominant: Math.max(absX, absY),
+    secondary: Math.min(absX, absY),
   }
-
-  if (hasBothAxes) {
-    evidence += 2
-  }
-
-  if (magnitude <= 16) {
-    evidence += 1
-  }
-
-  if (magnitude >= 96) {
-    evidence -= 2
-  }
-
-  if (hasFractionalDelta(absX) || hasFractionalDelta(absY)) {
-    evidence += 2
-  }
-
-  if (absX <= 0.01 && isDiscreteWheelStep(absY)) {
-    evidence -= 3
-  }
-
-  if (intervalMs !== null && intervalMs >= 0 && intervalMs <= 24) {
-    evidence += 1
-  }
-
-  return evidence
 }
 
-function decayScore(previousScore: number, intervalMs: number | null): number {
-  if (intervalMs === null || intervalMs <= STALE_EVENT_GAP_MS) {
-    return previousScore
+function isSecondaryAxisNoise(metrics: WheelAxisMetrics): boolean {
+  if (metrics.dominant <= 0) {
+    return true
   }
 
-  const decaySteps = Math.min(4, Math.floor(intervalMs / STALE_EVENT_GAP_MS))
-  if (decaySteps <= 0) {
-    return previousScore
+  return metrics.secondary <= Math.max(1.5, metrics.dominant * 0.12)
+}
+
+function hasMeaningfulDualAxisGesture(metrics: WheelAxisMetrics): boolean {
+  if (metrics.dominant < 0.01 || metrics.secondary < 0.8) {
+    return false
   }
 
-  const ratio = Math.pow(0.6, decaySteps)
-  return Math.trunc(previousScore * ratio)
+  return metrics.secondary / metrics.dominant >= 0.2
+}
+
+function isSingleAxisMouseWheelLikeGesture(metrics: WheelAxisMetrics): boolean {
+  return metrics.dominant >= MOUSE_SINGLE_AXIS_DELTA_MIN && isSecondaryAxisNoise(metrics)
+}
+
+function isSingleAxisDiscreteWheelStep(metrics: WheelAxisMetrics): boolean {
+  return isSingleAxisMouseWheelLikeGesture(metrics) && isDiscreteWheelStep(metrics.dominant)
+}
+
+function isLargeSingleAxisMouseBurst(metrics: WheelAxisMetrics): boolean {
+  return (
+    isSingleAxisMouseWheelLikeGesture(metrics) && metrics.dominant >= LARGE_SINGLE_AXIS_MOUSE_BURST
+  )
+}
+
+function isHighConfidenceMouseWheelSample(sample: WheelInputSample): boolean {
+  if (sample.deltaMode === 1 || sample.deltaMode === 2) {
+    return true
+  }
+
+  const metrics = resolveWheelAxisMetrics(sample)
+
+  return isSingleAxisDiscreteWheelStep(metrics) || isLargeSingleAxisMouseBurst(metrics)
+}
+
+function isStrongTrackpadPanSample(sample: WheelInputSample): boolean {
+  if (sample.ctrlKey || sample.deltaMode !== 0 || isHighConfidenceMouseWheelSample(sample)) {
+    return false
+  }
+
+  const metrics = resolveWheelAxisMetrics(sample)
+
+  if (!hasMeaningfulDualAxisGesture(metrics)) {
+    return false
+  }
+
+  return (
+    metrics.dominant <= STRONG_TRACKPAD_PIXEL_DELTA_MAX ||
+    hasFractionalDelta(metrics.absX) ||
+    hasFractionalDelta(metrics.absY)
+  )
+}
+
+function isCandidateTrackpadPanSample(sample: WheelInputSample): boolean {
+  if (sample.ctrlKey || sample.deltaMode !== 0 || isHighConfidenceMouseWheelSample(sample)) {
+    return false
+  }
+
+  const metrics = resolveWheelAxisMetrics(sample)
+
+  if (hasMeaningfulDualAxisGesture(metrics)) {
+    return true
+  }
+
+  if (metrics.dominant > STRONG_TRACKPAD_PIXEL_DELTA_MAX) {
+    return false
+  }
+
+  return hasFractionalDelta(metrics.absX) || hasFractionalDelta(metrics.absY)
+}
+
+function resolveWheelSampleTiming(
+  previous: CanvasInputModalityState,
+  sample: WheelInputSample,
+): { timestamp: number; intervalMs: number | null; continuesBurst: boolean } {
+  const timestamp = normalizeTimestamp(sample.timeStamp, previous.lastEventTimestamp)
+  const intervalMs =
+    previous.lastEventTimestamp === null || timestamp < previous.lastEventTimestamp
+      ? null
+      : timestamp - previous.lastEventTimestamp
+
+  return {
+    timestamp,
+    intervalMs,
+    continuesBurst: intervalMs !== null && intervalMs >= 0 && intervalMs <= TRACKPAD_BURST_GAP_MS,
+  }
 }
 
 export function createCanvasInputModalityState(
@@ -129,45 +176,95 @@ export function createCanvasInputModalityState(
 ): CanvasInputModalityState {
   return {
     mode: initialMode,
-    score: initialMode === 'trackpad' ? 2 : -2,
     lastEventTimestamp: null,
-    modeLockUntilTimestamp: null,
+    burstEventCount: 0,
+    gestureLikeEventCount: 0,
+    burstMode: 'unknown',
   }
+}
+
+export function classifyCurrentWheelInputMode(
+  previous: CanvasInputModalityState,
+  sample: WheelInputSample,
+): ClassifiedWheelInputMode {
+  const { continuesBurst } = resolveWheelSampleTiming(previous, sample)
+
+  if (sample.ctrlKey) {
+    return 'trackpad'
+  }
+
+  if (isHighConfidenceMouseWheelSample(sample)) {
+    return 'mouse'
+  }
+
+  if (isStrongTrackpadPanSample(sample)) {
+    return 'trackpad'
+  }
+
+  if (continuesBurst) {
+    if (previous.burstMode === 'mouse') {
+      return 'mouse'
+    }
+
+    if (previous.burstMode === 'trackpad') {
+      return 'trackpad'
+    }
+  }
+
+  if (isCandidateTrackpadPanSample(sample)) {
+    const nextGestureLikeEventCount = continuesBurst ? previous.gestureLikeEventCount + 1 : 1
+
+    if (nextGestureLikeEventCount >= TRACKPAD_BURST_SWITCH_EVENT_COUNT) {
+      return 'trackpad'
+    }
+  }
+
+  return 'unknown'
 }
 
 export function inferCanvasInputModalityFromWheel(
   previous: CanvasInputModalityState,
   sample: WheelInputSample,
 ): CanvasInputModalityState {
-  const timestamp = normalizeTimestamp(sample.timeStamp, previous.lastEventTimestamp)
-  const intervalMs =
-    previous.lastEventTimestamp === null || timestamp < previous.lastEventTimestamp
-      ? null
-      : timestamp - previous.lastEventTimestamp
+  const { timestamp, continuesBurst } = resolveWheelSampleTiming(previous, sample)
+  const classifiedMode = classifyCurrentWheelInputMode(previous, sample)
+  const isGestureLikeSample = sample.ctrlKey || isCandidateTrackpadPanSample(sample)
 
-  const baseScore = decayScore(previous.score, intervalMs)
-  const evidence = computeTrackpadEvidence(sample, intervalMs)
-  const nextScore = clamp(baseScore + evidence, SCORE_MIN, SCORE_MAX)
-  const lockUntil = previous.modeLockUntilTimestamp
-  const isModeLocked = lockUntil !== null && timestamp < lockUntil
+  let nextBurstEventCount = continuesBurst ? previous.burstEventCount + 1 : 1
+  let nextGestureLikeEventCount = continuesBurst ? previous.gestureLikeEventCount : 0
+
+  if (isGestureLikeSample) {
+    nextGestureLikeEventCount = continuesBurst ? previous.gestureLikeEventCount + 1 : 1
+  } else if (!continuesBurst || classifiedMode === 'mouse') {
+    nextGestureLikeEventCount = 0
+  }
+
+  let nextBurstMode = classifiedMode
+
+  if (classifiedMode === 'unknown' && continuesBurst) {
+    nextBurstMode = previous.burstMode
+  }
+
+  if (!continuesBurst) {
+    nextBurstEventCount = 1
+    if (!isGestureLikeSample && classifiedMode !== 'trackpad') {
+      nextGestureLikeEventCount = 0
+    }
+  }
 
   let nextMode = previous.mode
-  let nextLockUntil = isModeLocked ? lockUntil : null
 
-  if (!isModeLocked) {
-    if (nextMode === 'mouse' && nextScore >= TRACKPAD_SWITCH_THRESHOLD) {
-      nextMode = 'trackpad'
-      nextLockUntil = timestamp + TRACKPAD_MODE_LOCK_MS
-    } else if (nextMode === 'trackpad' && nextScore <= MOUSE_SWITCH_THRESHOLD) {
-      nextMode = 'mouse'
-      nextLockUntil = timestamp + MOUSE_MODE_LOCK_MS
-    }
+  if (classifiedMode === 'mouse') {
+    nextMode = 'mouse'
+  } else if (classifiedMode === 'trackpad') {
+    nextMode = 'trackpad'
   }
 
   return {
     mode: nextMode,
-    score: nextScore,
     lastEventTimestamp: timestamp,
-    modeLockUntilTimestamp: nextLockUntil,
+    burstEventCount: nextBurstEventCount,
+    gestureLikeEventCount: nextGestureLikeEventCount,
+    burstMode: nextBurstMode,
   }
 }
