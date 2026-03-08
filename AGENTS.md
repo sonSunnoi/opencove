@@ -2,12 +2,13 @@
 
 This file defines the **Unified Execution Standard** for all Agents (including Codex/Claude Code) working on the Cove repository.
 
-Your primary directive is to **Read `DEVELOPMENT.md` first** and strictly adhere to its rules. Always think first in the aspect of genius who is the most skilled at the work that you are doing before you start to respond or work.
+Your primary directive is to **Read `DEVELOPMENT.md` first** and strictly adhere to its rules. Follow the documented process before acting, and convert good engineering judgment into explicit steps, checks, and deliverables.
 
 **Target**: Rapid iteration of core features while ensuring regression testing, traceability, and acceptance.
 
 ## 1. Core Directives & Golden Rules
 
+0.  **Top-tier Architecture Mindset**: Never use a "patch" mindset. Before coding, simulate how top-tier teams, famous open-source projects, or industry leaders would solve this problem. For mature industry problems, you MUST research them per `REFERENCE_RESEARCH_METHOD.md`.
 1.  **Golden Rule**: ALWAYS read `DEVELOPMENT.md` at the start of a task. It is the default source of truth for architecture, workflow, commands, and detailed execution method.
 2.  **Monorepo**: Always set correct CWD. Follow the file structure defined in `DEVELOPMENT.md`.
 3.  **Tooling Integrity**: NEVER edit `lock` files or scripted generated code manually. Use the commands defined in the relevant module `DEVELOPMENT.md` (linked from root `DEVELOPMENT.md`).
@@ -25,17 +26,23 @@ On **every instruction**, triage the request and tell the user whether it is **S
 ### B. Large Change (Deep Thinking / 慎重对齐)
 - **Scope**: New features, refactors, schema/API changes, cross-module logic, or runtime-risk work.
 - **Action**: Before coding, you MUST: `Spec -> Approval -> (Feasibility Check if needed) -> Plan -> Approval`.
-    - `Spec` must cover business logic, acceptance criteria, top risks, state owners, invariants, and planned verification.
+    - `Spec` must EXPLICITLY cover:
+        1. The best industry practice/reference (Simulate the top-tier mindset; explicitly research only if it's a mature industry problem per Rule 0).
+        2. Business logic & acceptance criteria.
+        3. State owners, invariants, and top risks.
+        4. Planned verification.
     - `Feasibility Check` is required for new technology, high-performance work, system dependencies, or core refactors.
     - `Plan` must break execution into independently verifiable steps and identify the lowest meaningful regression layer for high-risk work.
 
-## 3. Core Engineering Rules
+## 3. Required Pre-Coding Checks
 
-- **Model First**: Identify mutable state, owner, allowed transitions, and derived UI before changing non-trivial behavior.
-- **Prefer Invariants**: Define 1-3 invariants before relying on scenario lists.
-- **Escalate Structural Risk Early**: If ownership, authority, or semantics are ambiguous, align before patching.
-- **Learn from Prior Art**: When a problem likely has existing industry practice, study external references first and adapt them to Cove before specing.
-- **Turn Bugs into Assets**: Real bugs should leave behind stronger tests, rules, assertions, or abstractions.
+Before implementation, do the following when the change is non-trivial:
+
+- Identify mutable state, owner, allowed transitions, and what is only derived UI.
+- Write 1-3 invariants before relying on scenario lists.
+- If ownership, authority, or semantics are ambiguous, stop and align before patching.
+- If the problem likely has existing industry practice, study external references before specing.
+- If fixing a real bug, leave behind a reusable asset such as a test, rule, assertion, or doc update.
 
 ## 4. Risk & Compliance Checklist
 
@@ -55,7 +62,7 @@ For runtime-risk or Large work, explicitly check:
 ## 6. Development Workflow
 
 1.  **Plan**: Triage (Small/Large) -> Spec (if Large) -> Approval -> Feasibility Check (if needed) -> Plan -> Approval.
-2.  **Code (TDD)**
+2.  **Code (TDD)**: `Red -> Green -> Refactor`.
 3.  **Verify**:
     -   **Small**: Targeted unit/integration tests OK.
     -   **Final/Large**: **MUST** run full suite (`pnpm pre-commit`).
