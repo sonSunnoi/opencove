@@ -6,7 +6,7 @@ import type {
   SnapshotTerminalInput,
   WriteTerminalInput,
 } from '../../../../shared/contracts/dto'
-import type { SpawnPtyOptions } from '../../infrastructure/pty/PtyManager'
+import type { SpawnPtyOptions } from '../../../../platform/process/pty/PtyManager'
 import { isAbsolute } from 'node:path'
 
 export function normalizeSpawnTerminalPayload(payload: unknown): SpawnPtyOptions {

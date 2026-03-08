@@ -65,7 +65,7 @@ describe('Pty runtime subscriptions', () => {
       },
     }))
 
-    vi.doMock('../../../src/contexts/terminal/infrastructure/pty/PtyManager', () => ({
+    vi.doMock('../../../src/platform/process/pty/PtyManager', () => ({
       PtyManager: MockPtyManager,
     }))
 
@@ -146,7 +146,7 @@ describe('Pty runtime subscriptions', () => {
       },
     }))
 
-    vi.doMock('../../../src/contexts/terminal/infrastructure/pty/PtyManager', () => ({
+    vi.doMock('../../../src/platform/process/pty/PtyManager', () => ({
       PtyManager: MockPtyManager,
     }))
 
@@ -224,7 +224,7 @@ describe('Pty runtime subscriptions', () => {
       },
     }))
 
-    vi.doMock('../../../src/contexts/terminal/infrastructure/pty/PtyManager', () => ({
+    vi.doMock('../../../src/platform/process/pty/PtyManager', () => ({
       PtyManager: MockPtyManager,
     }))
 
@@ -289,7 +289,7 @@ describe('Pty runtime subscriptions', () => {
       },
     }))
 
-    vi.doMock('../../../src/contexts/terminal/infrastructure/pty/PtyManager', () => ({
+    vi.doMock('../../../src/platform/process/pty/PtyManager', () => ({
       PtyManager: MockPtyManager,
     }))
 

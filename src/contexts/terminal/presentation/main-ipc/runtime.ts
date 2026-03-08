@@ -9,7 +9,7 @@ import type {
   TerminalSessionStateEvent,
 } from '../../../../shared/contracts/dto'
 import { locateAgentResumeSessionId } from '../../../agent/infrastructure/cli/AgentSessionLocator'
-import { PtyManager, type SpawnPtyOptions } from '../../infrastructure/pty/PtyManager'
+import { PtyManager, type SpawnPtyOptions } from '../../../../platform/process/pty/PtyManager'
 import { resolveSessionFilePath } from '../../../agent/infrastructure/watchers/SessionFileResolver'
 import { SessionTurnStateWatcher } from '../../../agent/infrastructure/watchers/SessionTurnStateWatcher'
 
