@@ -131,6 +131,7 @@ export interface SeedAgentData {
   resumeSessionId: string | null
   resumeSessionIdVerified?: boolean
   executionDirectory: string
+  expectedDirectory?: string | null
   directoryMode: 'workspace' | 'custom'
   customDirectory: string | null
   shouldCreateDirectory: boolean
@@ -164,6 +165,8 @@ export interface SeedNode {
   exitCode?: number | null
   lastError?: string | null
   scrollback?: string | null
+  executionDirectory?: string | null
+  expectedDirectory?: string | null
   agent?: SeedAgentData | null
   task?: SeedTaskData | null
 }

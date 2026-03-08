@@ -19,6 +19,8 @@ export function toRuntimeNodes(workspace: PersistedWorkspaceState): Node<Termina
       exitCode: node.exitCode,
       lastError: node.lastError,
       scrollback: node.scrollback,
+      executionDirectory: node.executionDirectory,
+      expectedDirectory: node.expectedDirectory,
       agent: node.agent,
       task:
         node.kind === 'task'

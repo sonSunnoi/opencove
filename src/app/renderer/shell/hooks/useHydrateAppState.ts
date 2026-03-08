@@ -96,7 +96,30 @@ function mergeHydratedNode(
   }
 }
 
-async function hydrateRuntimeNode({
+export function resolveTerminalHydrationCwd(
+  node: Node<TerminalNodeData>,
+  workspacePath: string,
+): string {
+  if (node.data.kind !== 'terminal') {
+    return workspacePath
+  }
+
+  const executionDirectory =
+    typeof node.data.executionDirectory === 'string' ? node.data.executionDirectory.trim() : ''
+  if (executionDirectory.length > 0) {
+    return executionDirectory
+  }
+
+  const expectedDirectory =
+    typeof node.data.expectedDirectory === 'string' ? node.data.expectedDirectory.trim() : ''
+  if (expectedDirectory.length > 0) {
+    return expectedDirectory
+  }
+
+  return workspacePath
+}
+
+export async function hydrateRuntimeNode({
   node,
   workspacePath,
   agentFullAccess,
@@ -119,7 +142,7 @@ async function hydrateRuntimeNode({
 
   try {
     const spawned = await window.coveApi.pty.spawn({
-      cwd: workspacePath,
+      cwd: resolveTerminalHydrationCwd(node, workspacePath),
       cols: 80,
       rows: 24,
     })
