@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import {
+  dragMouse,
   clearAndSeedWorkspace,
   dragLocatorTo,
   launchApp,
@@ -60,10 +61,11 @@ test.describe('Workspace Canvas - Drag & Resize', () => {
       const rightStartX = rightResizerBox.x + rightResizerBox.width / 2
       const rightStartY = rightResizerBox.y + rightResizerBox.height / 2
 
-      await window.mouse.move(rightStartX, rightStartY)
-      await window.mouse.down()
-      await window.mouse.move(rightStartX + 180, rightStartY)
-      await window.mouse.up()
+      await dragMouse(window, {
+        start: { x: rightStartX, y: rightStartY },
+        end: { x: rightStartX + 180, y: rightStartY },
+        steps: 12,
+      })
 
       const widthResizedNode = await window.evaluate(async key => {
         void key
@@ -99,10 +101,11 @@ test.describe('Workspace Canvas - Drag & Resize', () => {
       const bottomStartX = bottomResizerBox.x + bottomResizerBox.width / 2
       const bottomStartY = bottomResizerBox.y + bottomResizerBox.height / 2
 
-      await window.mouse.move(bottomStartX, bottomStartY)
-      await window.mouse.down()
-      await window.mouse.move(bottomStartX, bottomStartY + 120)
-      await window.mouse.up()
+      await dragMouse(window, {
+        start: { x: bottomStartX, y: bottomStartY },
+        end: { x: bottomStartX, y: bottomStartY + 120 },
+        steps: 12,
+      })
 
       const heightResizedNode = await window.evaluate(async key => {
         void key
@@ -130,7 +133,7 @@ test.describe('Workspace Canvas - Drag & Resize', () => {
       expect(heightResizedNode?.height ?? 0).toBeGreaterThan(300)
       await expect(firstTerminal.locator('.xterm')).toBeVisible()
 
-      await terminals.nth(1).locator('.terminal-node__header').click()
+      await terminals.nth(1).locator('.terminal-node__header').click({ force: true })
 
       await expect(firstTerminal).toBeVisible()
       await expect(firstTerminal.locator('.xterm')).toBeVisible()

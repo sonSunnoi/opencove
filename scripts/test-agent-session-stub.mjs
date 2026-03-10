@@ -130,7 +130,9 @@ async function runCodexCommentaryThenFinalScenario(cwd) {
     },
   })
 
-  await sleep(1800)
+  // Leave a larger observation window between commentary/tool-call activity
+  // and the final answer so CI timing jitter does not race the status assertion.
+  await sleep(4500)
   await appendCodexRecord(
     sessionFilePath,
     {

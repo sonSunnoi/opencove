@@ -8,7 +8,7 @@ const testAgentStubScriptPath = path.resolve(__dirname, '../../scripts/test-agen
 export const testWorkspacePath = path.resolve(__dirname, '../../')
 export const storageKey = 'cove:m0:workspace-state'
 export const seededWorkspaceId = 'workspace-seeded'
-export { dragLocatorTo, dragMouse } from './workspace-canvas.gestures'
+export { beginDragMouse, dragLocatorTo, dragMouse } from './workspace-canvas.gestures'
 type E2EWindowMode = 'normal' | 'inactive' | 'offscreen' | 'hidden'
 const E2E_APP_CLOSE_TIMEOUT_MS = 5_000
 const E2E_APP_FORCE_KILL_TIMEOUT_MS = 2_000

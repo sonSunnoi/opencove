@@ -1,23 +1,53 @@
 import { expect, type Locator, type Page } from '@playwright/test'
 
-export async function dragMouse(
+interface DragMousePoint {
+  x: number
+  y: number
+}
+
+interface DragMouseOptions {
+  start: DragMousePoint
+  end: DragMousePoint
+  steps?: number
+  triggerDistance?: number
+  settleAfterPressMs?: number
+  settleBeforeReleaseMs?: number
+  settleAfterReleaseMs?: number
+  modifiers?: Array<'Shift'>
+  draft?: Locator
+  draftTimeoutMs?: number
+}
+
+interface DragMouseMoveOptions {
+  steps?: number
+  settleAfterMoveMs?: number
+  repeatAtTarget?: boolean
+}
+
+interface DragMouseSession {
+  moveTo(target: DragMousePoint, options?: DragMouseMoveOptions): Promise<void>
+  release(): Promise<void>
+}
+
+async function releaseHeldModifier(window: Page, holdsShift: boolean): Promise<void> {
+  if (holdsShift) {
+    await window.keyboard.up('Shift').catch(() => undefined)
+  }
+}
+
+export async function beginDragMouse(
   window: Page,
-  options: {
-    start: { x: number; y: number }
-    end: { x: number; y: number }
-    steps?: number
-    triggerDistance?: number
-    settleAfterPressMs?: number
-    modifiers?: Array<'Shift'>
-    draft?: Locator
-    draftTimeoutMs?: number
+  options: Omit<DragMouseOptions, 'end'> & {
+    initialTarget?: DragMousePoint
   },
-): Promise<void> {
-  const steps = options.steps ?? 12
+): Promise<DragMouseSession> {
+  const steps = options.steps ?? 16
   const triggerDistance = options.triggerDistance ?? 8
-  const settleAfterPressMs = options.settleAfterPressMs ?? 24
-  const deltaX = options.end.x - options.start.x
-  const deltaY = options.end.y - options.start.y
+  const settleAfterPressMs = options.settleAfterPressMs ?? 32
+  const settleBeforeReleaseMs = options.settleBeforeReleaseMs ?? 48
+  const settleAfterReleaseMs = options.settleAfterReleaseMs ?? 32
+  const deltaX = (options.initialTarget?.x ?? options.start.x + triggerDistance) - options.start.x
+  const deltaY = (options.initialTarget?.y ?? options.start.y) - options.start.y
   const totalDistance = Math.hypot(deltaX, deltaY)
   const triggerRatio =
     totalDistance > 0 ? Math.min(1, triggerDistance / Math.max(totalDistance, 1)) : 0
@@ -26,6 +56,7 @@ export async function dragMouse(
     y: options.start.y + deltaY * triggerRatio,
   }
   const holdsShift = (options.modifiers ?? []).includes('Shift')
+  let released = false
 
   if (holdsShift) {
     await window.keyboard.down('Shift')
@@ -48,14 +79,69 @@ export async function dragMouse(
     if (settleAfterPressMs > 0) {
       await window.waitForTimeout(settleAfterPressMs)
     }
+  } catch (error) {
+    await window.mouse.up().catch(() => undefined)
+    await releaseHeldModifier(window, holdsShift)
+    throw error
+  }
 
-    await window.mouse.move(options.end.x, options.end.y, { steps })
-    await window.mouse.up()
-  } finally {
-    if (holdsShift) {
-      await window.keyboard.up('Shift')
+  const moveTo = async (
+    target: DragMousePoint,
+    moveOptions: DragMouseMoveOptions = {},
+  ): Promise<void> => {
+    const moveSteps = moveOptions.steps ?? steps
+    const repeatAtTarget = moveOptions.repeatAtTarget ?? true
+
+    await window.mouse.move(target.x, target.y, { steps: moveSteps })
+
+    // Playwright documents that some drag targets need a second move to
+    // reliably receive dragover before release.
+    if (repeatAtTarget) {
+      await window.mouse.move(target.x, target.y, {
+        steps: Math.max(2, Math.min(moveSteps, 4)),
+      })
+    }
+
+    if ((moveOptions.settleAfterMoveMs ?? 0) > 0) {
+      await window.waitForTimeout(moveOptions.settleAfterMoveMs ?? 0)
     }
   }
+
+  const release = async (): Promise<void> => {
+    if (released) {
+      return
+    }
+
+    released = true
+
+    try {
+      if (settleBeforeReleaseMs > 0) {
+        await window.waitForTimeout(settleBeforeReleaseMs)
+      }
+
+      await window.mouse.up()
+
+      if (settleAfterReleaseMs > 0) {
+        await window.waitForTimeout(settleAfterReleaseMs)
+      }
+    } finally {
+      await releaseHeldModifier(window, holdsShift)
+    }
+  }
+
+  return {
+    moveTo,
+    release,
+  }
+}
+
+export async function dragMouse(window: Page, options: DragMouseOptions): Promise<void> {
+  const drag = await beginDragMouse(window, {
+    ...options,
+    initialTarget: options.end,
+  })
+  await drag.moveTo(options.end)
+  await drag.release()
 }
 
 export async function dragLocatorTo(

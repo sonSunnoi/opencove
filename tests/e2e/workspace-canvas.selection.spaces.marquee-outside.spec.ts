@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test'
 import {
+  beginDragMouse,
   clearAndSeedWorkspace,
   launchApp,
   storageKey,
@@ -56,14 +57,17 @@ test.describe('Workspace Canvas - Selection (Spaces)', () => {
       const endX = Math.min(paneBox.x + paneBox.width - 24, spaceBox.x + spaceBox.width * 0.35)
       const endY = Math.min(paneBox.y + paneBox.height - 24, spaceBox.y + spaceBox.height * 0.35)
 
-      await window.mouse.move(startX, startY)
-      await window.mouse.down()
-      await window.mouse.move(endX, endY, { steps: 10 })
+      const drag = await beginDragMouse(window, {
+        start: { x: startX, y: startY },
+        initialTarget: { x: endX, y: endY },
+        steps: 10,
+      })
+      await drag.moveTo({ x: endX, y: endY }, { settleAfterMoveMs: 48 })
 
       await expect(window.locator('.workspace-space-region--selected')).toHaveCount(1)
       await expect(window.locator('.react-flow__node.selected')).toHaveCount(0)
 
-      await window.mouse.up()
+      await drag.release()
 
       await expect(window.locator('.workspace-space-region--selected')).toHaveCount(1)
       await expect(window.locator('.react-flow__node.selected')).toHaveCount(0)
@@ -128,14 +132,17 @@ test.describe('Workspace Canvas - Selection (Spaces)', () => {
       const endX = Math.min(paneBox.x + paneBox.width - 24, spaceBox.x + spaceBox.width * 0.35)
       const endY = Math.min(paneBox.y + paneBox.height - 24, spaceBox.y + spaceBox.height * 0.35)
 
-      await window.mouse.move(startX, startY)
-      await window.mouse.down()
-      await window.mouse.move(endX, endY, { steps: 10 })
+      const drag = await beginDragMouse(window, {
+        start: { x: startX, y: startY },
+        initialTarget: { x: endX, y: endY },
+        steps: 10,
+      })
+      await drag.moveTo({ x: endX, y: endY }, { settleAfterMoveMs: 48 })
 
       await expect(window.locator('.workspace-space-region--selected')).toHaveCount(1)
       await expect(window.locator('.react-flow__node.selected')).toHaveCount(0)
 
-      await window.mouse.up()
+      await drag.release()
 
       await expect(window.locator('.workspace-space-region--selected')).toHaveCount(1)
       await expect(window.locator('.react-flow__node.selected')).toHaveCount(0)
@@ -209,9 +216,12 @@ test.describe('Workspace Canvas - Selection (Spaces)', () => {
       const endX = spaceBox.x + spaceBox.width * 0.35
       const endY = spaceBox.y + spaceBox.height * 0.35
 
-      await window.mouse.move(startX, startY)
-      await window.mouse.down()
-      await window.mouse.move(midX, midY, { steps: 10 })
+      const drag = await beginDragMouse(window, {
+        start: { x: startX, y: startY },
+        initialTarget: { x: midX, y: midY },
+        steps: 10,
+      })
+      await drag.moveTo({ x: midX, y: midY }, { settleAfterMoveMs: 48 })
 
       await expect(window.locator('.workspace-space-region--selected')).toHaveCount(0)
       await expect(window.locator('.react-flow__node.selected')).toHaveCount(1)
@@ -219,7 +229,7 @@ test.describe('Workspace Canvas - Selection (Spaces)', () => {
         window.locator('.react-flow__node.selected .terminal-node__title'),
       ).toContainText('terminal-marquee-outside')
 
-      await window.mouse.move(endX, endY, { steps: 12 })
+      await drag.moveTo({ x: endX, y: endY }, { steps: 12, settleAfterMoveMs: 48 })
 
       await expect(window.locator('.workspace-space-region--selected')).toHaveCount(1)
       await expect(window.locator('.react-flow__node.selected')).toHaveCount(1)
@@ -227,7 +237,7 @@ test.describe('Workspace Canvas - Selection (Spaces)', () => {
         window.locator('.react-flow__node.selected .terminal-node__title'),
       ).toContainText('terminal-marquee-outside')
 
-      await window.mouse.up()
+      await drag.release()
 
       await expect(window.locator('.workspace-space-region--selected')).toHaveCount(1)
       await expect(window.locator('.react-flow__node.selected')).toHaveCount(1)
@@ -317,10 +327,16 @@ test.describe('Workspace Canvas - Selection (Spaces)', () => {
       const dragDx = 0
       const dragDy = 180
 
-      await window.mouse.move(dragStartX, dragStartY)
-      await window.mouse.down()
-      await window.mouse.move(dragStartX + dragDx, dragStartY + dragDy, { steps: 12 })
-      await window.mouse.up()
+      const nodeDrag = await beginDragMouse(window, {
+        start: { x: dragStartX, y: dragStartY },
+        initialTarget: { x: dragStartX + dragDx, y: dragStartY + dragDy },
+        steps: 12,
+      })
+      await nodeDrag.moveTo(
+        { x: dragStartX + dragDx, y: dragStartY + dragDy },
+        { settleAfterMoveMs: 48 },
+      )
+      await nodeDrag.release()
 
       await expect
         .poll(async () => {

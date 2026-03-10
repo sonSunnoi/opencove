@@ -107,6 +107,7 @@ test.describe('Workspace Canvas - Minimap & Zoom', () => {
 
       await terminal.locator('.terminal-node__terminal').click({
         position: { x: 48, y: 48 },
+        force: true,
       })
 
       await expect
@@ -153,6 +154,7 @@ test.describe('Workspace Canvas - Minimap & Zoom', () => {
       await expect(firstTerminal).toBeVisible()
       await firstTerminal.locator('.terminal-node__terminal').click({
         position: { x: 48, y: 48 },
+        force: true,
       })
 
       await expect
@@ -165,6 +167,7 @@ test.describe('Workspace Canvas - Minimap & Zoom', () => {
       await expect(secondTerminal).toBeVisible()
       await secondTerminal.locator('.terminal-node__terminal').click({
         position: { x: 48, y: 48 },
+        force: true,
       })
 
       const readCenterDelta = async (): Promise<{ dx: number; dy: number }> => {

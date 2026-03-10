@@ -18,14 +18,14 @@ test.describe('Workspace Canvas - Selection', () => {
       const startX = paneBox.x + 140
       const startY = paneBox.y + 120
 
-      await window.keyboard.down('Shift')
-      await window.mouse.move(startX, startY)
-      await window.mouse.down()
-      await window.mouse.move(startX + 220, startY + 170, { steps: 8 })
-      await expect(window.locator('.workspace-selection-draft')).toBeVisible()
-      await window.mouse.up()
+      await dragMouse(window, {
+        start: { x: startX, y: startY },
+        end: { x: startX + 220, y: startY + 170 },
+        steps: 8,
+        modifiers: ['Shift'],
+        draft: window.locator('.workspace-selection-draft'),
+      })
       await expect(window.locator('.workspace-selection-draft')).toHaveCount(0)
-      await window.keyboard.up('Shift')
 
       await expect(
         window.locator('[data-testid="workspace-empty-selection-create-space"]'),
