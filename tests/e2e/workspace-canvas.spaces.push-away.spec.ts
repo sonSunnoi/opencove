@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   clearAndSeedWorkspace,
+  dragMouse,
   launchApp,
   storageKey,
   testWorkspacePath,
@@ -59,10 +60,11 @@ test.describe('Workspace Canvas - Spaces (Push-away)', () => {
       const dragDx = 820
       const dragDy = 0
 
-      await window.mouse.move(startX, startY)
-      await window.mouse.down()
-      await window.mouse.move(startX + dragDx, startY + dragDy, { steps: 14 })
-      await window.mouse.up()
+      await dragMouse(window, {
+        start: { x: startX, y: startY },
+        end: { x: startX + dragDx, y: startY + dragDy },
+        steps: 14,
+      })
 
       await expect
         .poll(async () => {
@@ -167,10 +169,11 @@ test.describe('Workspace Canvas - Spaces (Push-away)', () => {
       const startX = handleBox.x + handleBox.width * 0.5
       const startY = handleBox.y + handleBox.height * 0.5
 
-      await window.mouse.move(startX, startY)
-      await window.mouse.down()
-      await window.mouse.move(startX + 220, startY + 0, { steps: 12 })
-      await window.mouse.up()
+      await dragMouse(window, {
+        start: { x: startX, y: startY },
+        end: { x: startX + 220, y: startY },
+        steps: 12,
+      })
 
       await expect
         .poll(async () => {
@@ -269,10 +272,11 @@ test.describe('Workspace Canvas - Spaces (Push-away)', () => {
       const startX = handleBox.x + handleBox.width * 0.5
       const startY = handleBox.y + handleBox.height * 0.5
 
-      await window.mouse.move(startX, startY)
-      await window.mouse.down()
-      await window.mouse.move(startX - 480, startY, { steps: 12 })
-      await window.mouse.up()
+      await dragMouse(window, {
+        start: { x: startX, y: startY },
+        end: { x: startX - 480, y: startY },
+        steps: 12,
+      })
 
       await expect
         .poll(async () => {

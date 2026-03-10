@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { clearAndSeedWorkspace, launchApp, storageKey } from './workspace-canvas.helpers'
+import { clearAndSeedWorkspace, dragMouse, launchApp, storageKey } from './workspace-canvas.helpers'
 
 test.describe('Workspace Canvas - Spaces (Push Away)', () => {
   test('pushes away unselected windows when creating a space would overlap them', async () => {
@@ -53,10 +53,11 @@ test.describe('Workspace Canvas - Spaces (Push Away)', () => {
       const panY = paneBox.y + 60
       const panOnce = async (dx: number) => {
         const startX = paneBox.x + paneBox.width * 0.5
-        await window.mouse.move(startX, panY)
-        await window.mouse.down()
-        await window.mouse.move(startX + dx, panY, { steps: 12 })
-        await window.mouse.up()
+        await dragMouse(window, {
+          start: { x: startX, y: panY },
+          end: { x: startX + dx, y: panY },
+          steps: 12,
+        })
       }
 
       await panOnce(-520)
@@ -76,7 +77,6 @@ test.describe('Workspace Canvas - Spaces (Push Away)', () => {
 
       const selectionStartY = Math.max(paneBox.y + 40, rightBox.y - 24)
 
-      await window.keyboard.down('Shift')
       // Use a narrow box selection that only intersects the right node (avoid selecting middle).
       const rightCenterX = rightBox.x + rightBox.width * 0.82
       const boxHalfWidth = 28
@@ -90,11 +90,13 @@ test.describe('Workspace Canvas - Spaces (Push Away)', () => {
       const startY = canStartAbove ? aboveY : canStartBelow ? belowY : selectionStartY
       const endY = Math.min(paneBox.y + paneBox.height - 120, rightBox.y + rightBox.height * 0.65)
 
-      await window.mouse.move(boxLeft, startY)
-      await window.mouse.down()
-      await window.mouse.move(boxRight, endY, { steps: 10 })
-      await window.mouse.up()
-      await window.keyboard.up('Shift')
+      await dragMouse(window, {
+        start: { x: boxLeft, y: startY },
+        end: { x: boxRight, y: endY },
+        steps: 10,
+        modifiers: ['Shift'],
+        draft: window.locator('.workspace-selection-draft'),
+      })
 
       await expect(window.locator('.react-flow__node.selected')).toHaveCount(2)
 

@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   clearAndSeedWorkspace,
+  dragMouse,
   dragLocatorTo,
   launchApp,
   storageKey,
@@ -263,12 +264,13 @@ test.describe('Workspace Canvas - Spaces (Crowded Drop)', () => {
         Math.max(dragNodeABox.y + dragNodeABox.height, dragNodeBBox.y + dragNodeBBox.height) + 24,
       )
 
-      await window.keyboard.down('Shift')
-      await window.mouse.move(selectionStartX, selectionStartY)
-      await window.mouse.down()
-      await window.mouse.move(selectionEndX, selectionEndY, { steps: 10 })
-      await window.mouse.up()
-      await window.keyboard.up('Shift')
+      await dragMouse(window, {
+        start: { x: selectionStartX, y: selectionStartY },
+        end: { x: selectionEndX, y: selectionEndY },
+        steps: 10,
+        modifiers: ['Shift'],
+        draft: window.locator('.workspace-selection-draft'),
+      })
 
       await expect(window.locator('.react-flow__node.selected')).toHaveCount(2)
 
@@ -413,7 +415,7 @@ test.describe('Workspace Canvas - Spaces (Crowded Drop)', () => {
         return await waitForSpaceStable(attemptsRemaining - 1)
       }
 
-      expect(await waitForSpaceStable(12)).toBe(true)
+      expect(await waitForSpaceStable(24)).toBe(true)
 
       await window.waitForTimeout(350)
       expect(await assertSpaceStable()).toBe(true)

@@ -275,6 +275,15 @@ test.describe('Workspace Canvas - Spaces (Drop Ownership)', () => {
 
       const pane = window.locator('.workspace-canvas .react-flow__pane')
       await expect(pane).toBeVisible()
+      const spaceRegion = window
+        .locator('.workspace-space-region')
+        .filter({ hasText: 'Overlap Scope' })
+        .first()
+      await expect(spaceRegion).toBeVisible()
+      const spaceBox = await spaceRegion.boundingBox()
+      if (!spaceBox) {
+        throw new Error('space bounding box unavailable')
+      }
 
       const draggedNode = window
         .locator('.terminal-node')
@@ -282,9 +291,13 @@ test.describe('Workspace Canvas - Spaces (Drop Ownership)', () => {
         .first()
       await expect(draggedNode).toBeVisible()
 
-      await dragLocatorTo(window, draggedNode.locator('.terminal-node__header'), pane, {
+      await dragLocatorTo(window, draggedNode.locator('.terminal-node__header'), spaceRegion, {
         sourcePosition: { x: 80, y: 16 },
-        targetPosition: { x: 440, y: 700 },
+        targetPosition: {
+          x: Math.min(Math.max(220, Math.round(spaceBox.width * 0.28)), spaceBox.width - 60),
+          y: Math.min(Math.max(320, Math.round(spaceBox.height * 0.6)), spaceBox.height - 160),
+        },
+        steps: 18,
       })
 
       await expect

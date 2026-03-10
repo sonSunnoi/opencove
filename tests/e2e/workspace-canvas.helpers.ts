@@ -1,9 +1,4 @@
-import {
-  _electron as electron,
-  type ElectronApplication,
-  type Locator,
-  type Page,
-} from '@playwright/test'
+import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'path'
@@ -13,6 +8,7 @@ const testAgentStubScriptPath = path.resolve(__dirname, '../../scripts/test-agen
 export const testWorkspacePath = path.resolve(__dirname, '../../')
 export const storageKey = 'cove:m0:workspace-state'
 export const seededWorkspaceId = 'workspace-seeded'
+export { dragLocatorTo, dragMouse } from './workspace-canvas.gestures'
 type E2EWindowMode = 'normal' | 'inactive' | 'offscreen' | 'hidden'
 const E2E_APP_CLOSE_TIMEOUT_MS = 5_000
 const E2E_APP_FORCE_KILL_TIMEOUT_MS = 2_000
@@ -55,6 +51,18 @@ function resolveLaunchModes(windowMode?: E2EWindowMode): E2EWindowMode[] {
   }
 
   return [...new Set(candidates)]
+}
+
+function shouldDisableElectronSandboxForLinuxCi(): boolean {
+  return process.platform === 'linux' && isTruthyEnv(process.env['CI'])
+}
+
+function resolveElectronLaunchArgs(): string[] {
+  if (!shouldDisableElectronSandboxForLinuxCi()) {
+    return [electronAppPath]
+  }
+
+  return ['--no-sandbox', '--disable-dev-shm-usage', electronAppPath]
 }
 
 async function delay(ms: number): Promise<void> {
@@ -205,21 +213,31 @@ async function launchAppInMode(
   const userDataDir = options.userDataDir ?? (await createTestUserDataDir())
   const cleanupUserDataDir = options.cleanupUserDataDir ?? true
   const testHomeDir = path.join(userDataDir, 'home')
+  const testConfigDir = path.join(userDataDir, 'config')
+  const testCacheDir = path.join(userDataDir, 'cache')
+  const testRuntimeDir = path.join(userDataDir, 'runtime')
   await mkdir(testHomeDir, { recursive: true })
+  await mkdir(testConfigDir, { recursive: true })
+  await mkdir(testCacheDir, { recursive: true })
+  await mkdir(testRuntimeDir, { recursive: true, mode: 0o700 })
   let electronApp: ElectronApplication | null = null
 
   try {
     electronApp = await electron.launch({
-      args: [electronAppPath],
+      args: resolveElectronLaunchArgs(),
       env: {
         ...process.env,
         NODE_ENV: 'test',
         HOME: testHomeDir,
         USERPROFILE: testHomeDir,
+        XDG_CONFIG_HOME: testConfigDir,
+        XDG_CACHE_HOME: testCacheDir,
+        XDG_RUNTIME_DIR: testRuntimeDir,
         OPENCOVE_TEST_WORKSPACE: testWorkspacePath,
         OPENCOVE_TEST_USER_DATA_DIR: userDataDir,
         OPENCOVE_TEST_AGENT_STUB_SCRIPT: testAgentStubScriptPath,
         OPENCOVE_E2E_WINDOW_MODE: launchMode,
+        ...(shouldDisableElectronSandboxForLinuxCi() ? { ELECTRON_DISABLE_SANDBOX: '1' } : {}),
         ...options.env,
       },
     })
@@ -415,37 +433,6 @@ export async function clearAndSeedWorkspace(
     ],
     settings: options?.settings,
   })
-}
-
-export async function dragLocatorTo(
-  window: Page,
-  source: Locator,
-  target: Locator,
-  options: {
-    sourcePosition?: { x: number; y: number }
-    targetPosition?: { x: number; y: number }
-    steps?: number
-  } = {},
-): Promise<void> {
-  const sourceBox = await source.boundingBox()
-  if (!sourceBox) {
-    throw new Error('source locator bounding box unavailable')
-  }
-
-  const targetBox = await target.boundingBox()
-  if (!targetBox) {
-    throw new Error('target locator bounding box unavailable')
-  }
-
-  const startX = sourceBox.x + (options.sourcePosition?.x ?? sourceBox.width / 2)
-  const startY = sourceBox.y + (options.sourcePosition?.y ?? sourceBox.height / 2)
-  const endX = targetBox.x + (options.targetPosition?.x ?? targetBox.width / 2)
-  const endY = targetBox.y + (options.targetPosition?.y ?? targetBox.height / 2)
-
-  await window.mouse.move(startX, startY)
-  await window.mouse.down()
-  await window.mouse.move(endX, endY, { steps: options.steps ?? 12 })
-  await window.mouse.up()
 }
 
 export async function readCanvasViewport(

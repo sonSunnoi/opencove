@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test'
-import { clearAndSeedWorkspace, launchApp, storageKey } from './workspace-canvas.helpers'
+import { clearAndSeedWorkspace, dragMouse, launchApp, storageKey } from './workspace-canvas.helpers'
 
 test.describe('Workspace Canvas - Selection', () => {
   test('does not allow creating space from empty shift box selection', async () => {
@@ -92,9 +92,9 @@ test.describe('Workspace Canvas - Selection', () => {
         throw new Error('workspace pane bounding box unavailable')
       }
 
-      await pane.dragTo(pane, {
-        sourcePosition: { x: 120, y: 120 },
-        targetPosition: { x: 700, y: 520 },
+      await dragMouse(window, {
+        start: { x: paneBox.x + 120, y: paneBox.y + 120 },
+        end: { x: paneBox.x + 700, y: paneBox.y + 520 },
       })
 
       await expect(window.locator('.react-flow__node.selected')).toHaveCount(1)
@@ -122,12 +122,13 @@ test.describe('Workspace Canvas - Selection', () => {
         secondNodeBox.y + secondNodeBox.height - 24,
       )
 
-      await window.keyboard.down('Shift')
-      await window.mouse.move(selectionStartX, selectionStartY)
-      await window.mouse.down()
-      await window.mouse.move(selectionEndX, selectionEndY, { steps: 10 })
-      await window.mouse.up()
-      await window.keyboard.up('Shift')
+      await dragMouse(window, {
+        start: { x: selectionStartX, y: selectionStartY },
+        end: { x: selectionEndX, y: selectionEndY },
+        steps: 10,
+        modifiers: ['Shift'],
+        draft: window.locator('.workspace-selection-draft'),
+      })
 
       await expect(window.locator('.react-flow__node.selected')).toHaveCount(2)
 
@@ -150,22 +151,25 @@ test.describe('Workspace Canvas - Selection', () => {
         firstNodeBoxForReplace.y + firstNodeBoxForReplace.height - 24,
       )
 
-      await window.keyboard.down('Shift')
-      await window.mouse.move(replaceStartX, replaceStartY)
-      await window.mouse.down()
-      await window.mouse.move(replaceEndX, replaceEndY, { steps: 10 })
-      await window.mouse.up()
-      await window.keyboard.up('Shift')
+      await dragMouse(window, {
+        start: { x: replaceStartX, y: replaceStartY },
+        end: { x: replaceEndX, y: replaceEndY },
+        steps: 10,
+        modifiers: ['Shift'],
+        draft: window.locator('.workspace-selection-draft'),
+      })
 
       await expect(window.locator('.react-flow__node.selected')).toHaveCount(1)
       await expect(
         window.locator('.react-flow__node.selected .terminal-node__title').first(),
       ).toContainText('terminal-trackpad-select-b')
 
-      await window.mouse.move(replaceStartX, replaceStartY)
-      await window.mouse.down()
-      await window.mouse.move(replaceEndX, replaceEndY, { steps: 10 })
-      await window.mouse.up()
+      await dragMouse(window, {
+        start: { x: replaceStartX, y: replaceStartY },
+        end: { x: replaceEndX, y: replaceEndY },
+        steps: 10,
+        draft: window.locator('.workspace-selection-draft'),
+      })
 
       await expect(window.locator('.react-flow__node.selected')).toHaveCount(1)
       await expect(
@@ -200,10 +204,14 @@ test.describe('Workspace Canvas - Selection', () => {
 
       const pane = window.locator('.workspace-canvas .react-flow__pane')
       await expect(pane).toBeVisible()
+      const paneBox = await pane.boundingBox()
+      if (!paneBox) {
+        throw new Error('workspace pane bounding box unavailable')
+      }
 
-      await pane.dragTo(pane, {
-        sourcePosition: { x: 120, y: 120 },
-        targetPosition: { x: 700, y: 520 },
+      await dragMouse(window, {
+        start: { x: paneBox.x + 120, y: paneBox.y + 120 },
+        end: { x: paneBox.x + 700, y: paneBox.y + 520 },
       })
       await expect(window.locator('.react-flow__node.selected')).toHaveCount(1)
 
@@ -262,9 +270,14 @@ test.describe('Workspace Canvas - Selection', () => {
       await expect(pane).toBeVisible()
       await expect(window.locator('.react-flow__node.selected')).toHaveCount(0)
 
-      await pane.dragTo(pane, {
-        sourcePosition: { x: 80, y: 80 },
-        targetPosition: { x: 760, y: 560 },
+      const paneBox = await pane.boundingBox()
+      if (!paneBox) {
+        throw new Error('workspace pane bounding box unavailable')
+      }
+
+      await dragMouse(window, {
+        start: { x: paneBox.x + 80, y: paneBox.y + 80 },
+        end: { x: paneBox.x + 760, y: paneBox.y + 560 },
       })
       await expect(window.locator('.react-flow__node.selected')).toHaveCount(0)
     } finally {

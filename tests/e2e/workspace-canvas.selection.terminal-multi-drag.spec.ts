@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import {
   clearAndSeedWorkspace,
+  dragMouse,
   launchApp,
   readCanvasViewport,
   storageKey,
@@ -131,10 +132,11 @@ test.describe('Workspace Canvas - Selection (Terminal Multi Drag)', () => {
 
       await window.waitForTimeout(150)
 
-      await window.mouse.move(startX, startY)
-      await window.mouse.down()
-      await window.mouse.move(endX, endY, { steps: 12 })
-      await window.mouse.up()
+      await dragMouse(window, {
+        start: { x: startX, y: startY },
+        end: { x: endX, y: endY },
+        steps: 12,
+      })
 
       await readCanvasViewport(window)
       await leftTerminal.boundingBox()
@@ -225,13 +227,13 @@ test.describe('Workspace Canvas - Selection (Terminal Multi Drag)', () => {
         const endX = Math.min(paneBox.x + paneBox.width - 40, targetBox.x + targetBox.width - 24)
         const endY = Math.min(paneBox.y + paneBox.height - 120, targetBox.y + targetBox.height - 24)
 
-        await window.keyboard.down('Shift')
-        await window.mouse.move(startX, startY)
-        await window.mouse.down()
-        await window.mouse.move(endX, endY, { steps: 10 })
-        await expect(window.locator('.workspace-selection-draft')).toBeVisible()
-        await window.mouse.up()
-        await window.keyboard.up('Shift')
+        await dragMouse(window, {
+          start: { x: startX, y: startY },
+          end: { x: endX, y: endY },
+          steps: 10,
+          modifiers: ['Shift'],
+          draft: window.locator('.workspace-selection-draft'),
+        })
         await expect(window.locator('.workspace-selection-draft')).toHaveCount(0)
       }
 
@@ -261,10 +263,11 @@ test.describe('Workspace Canvas - Selection (Terminal Multi Drag)', () => {
       const endX = Math.min(paneBox.x + paneBox.width - 60, startX + 240)
       const endY = Math.min(paneBox.y + paneBox.height - 60, startY + 220)
 
-      await window.mouse.move(startX, startY)
-      await window.mouse.down()
-      await window.mouse.move(endX, endY, { steps: 12 })
-      await window.mouse.up()
+      await dragMouse(window, {
+        start: { x: startX, y: startY },
+        end: { x: endX, y: endY },
+        steps: 12,
+      })
 
       await expect
         .poll(async () => {

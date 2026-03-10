@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   clearAndSeedWorkspace,
+  dragMouse,
   dragLocatorTo,
   launchApp,
   readCanvasViewport,
@@ -330,9 +331,14 @@ test.describe('Workspace Canvas - Minimap & Zoom', () => {
 
       const pane = window.locator('.workspace-canvas .react-flow__pane')
       await expect(pane).toBeVisible()
-      await pane.dragTo(pane, {
-        sourcePosition: { x: 420, y: 320 },
-        targetPosition: { x: 260, y: 220 },
+      const paneBox = await pane.boundingBox()
+      if (!paneBox) {
+        throw new Error('workspace pane bounding box unavailable')
+      }
+
+      await dragMouse(window, {
+        start: { x: paneBox.x + 420, y: paneBox.y + 320 },
+        end: { x: paneBox.x + 260, y: paneBox.y + 220 },
       })
 
       const minimapDock = window.locator('.workspace-canvas__minimap-dock')

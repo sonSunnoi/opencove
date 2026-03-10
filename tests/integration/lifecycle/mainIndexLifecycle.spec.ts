@@ -8,6 +8,9 @@ function createMockApp() {
   return {
     whenReady: vi.fn(() => Promise.resolve()),
     getPath: vi.fn((_name: string) => '/tmp/cove-test-userdata'),
+    commandLine: {
+      appendSwitch: vi.fn(),
+    },
     on: vi.fn((event: string, listener: Listener) => {
       const existing = listeners.get(event) ?? []
       existing.push(listener)

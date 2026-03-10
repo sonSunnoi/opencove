@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test'
-import { clearAndSeedWorkspace, launchApp, testWorkspacePath } from './workspace-canvas.helpers'
+import {
+  clearAndSeedWorkspace,
+  dragMouse,
+  launchApp,
+  testWorkspacePath,
+} from './workspace-canvas.helpers'
 
 test.describe('Workspace Canvas - Selection (Node Scope)', () => {
   test('does not allow shift-click multi-select across space boundaries', async () => {
@@ -140,13 +145,13 @@ test.describe('Workspace Canvas - Selection (Node Scope)', () => {
       const endX = Math.min(paneBox.x + paneBox.width - 40, outsideBox.x + outsideBox.width - 24)
       const endY = Math.min(paneBox.y + paneBox.height - 40, outsideBox.y + outsideBox.height - 24)
 
-      await window.keyboard.down('Shift')
-      await window.mouse.move(startX, startY)
-      await window.mouse.down()
-      await window.mouse.move(endX, endY, { steps: 10 })
-      await expect(window.locator('.workspace-selection-draft')).toBeVisible()
-      await window.mouse.up()
-      await window.keyboard.up('Shift')
+      await dragMouse(window, {
+        start: { x: startX, y: startY },
+        end: { x: endX, y: endY },
+        steps: 10,
+        modifiers: ['Shift'],
+        draft: window.locator('.workspace-selection-draft'),
+      })
 
       await expect(window.locator('.workspace-selection-draft')).toHaveCount(0)
       await expect(window.locator('.react-flow__node.selected')).toHaveCount(1)

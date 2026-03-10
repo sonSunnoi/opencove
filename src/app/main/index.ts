@@ -10,6 +10,17 @@ let ipcDisposable: ReturnType<typeof registerIpcHandlers> | null = null
 const APP_USER_DATA_DIRECTORY_NAME = 'opencove'
 const OPENCOVE_APP_USER_MODEL_ID = 'dev.deadwave.opencove'
 
+if (process.platform === 'linux' && process.env['NODE_ENV'] === 'test') {
+  const disableSandboxForCi =
+    (process.env['CI'] === '1' || process.env['CI']?.toLowerCase() === 'true') &&
+    process.env['ELECTRON_DISABLE_SANDBOX'] === '1'
+
+  if (disableSandboxForCi) {
+    app.commandLine.appendSwitch('no-sandbox')
+    app.commandLine.appendSwitch('disable-dev-shm-usage')
+  }
+}
+
 function preserveCanonicalUserDataPath(): void {
   const appDataPath = app.getPath('appData')
   app.setPath('userData', resolve(appDataPath, APP_USER_DATA_DIRECTORY_NAME))

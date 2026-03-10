@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   clearAndSeedWorkspace,
+  dragMouse,
   launchApp,
   storageKey,
   testWorkspacePath,
@@ -76,13 +77,14 @@ test.describe('Workspace Canvas - Spaces (Node Resize)', () => {
         throw new Error('terminal right resizer bounding box unavailable')
       }
 
-      await window.mouse.move(rightBox.x + rightBox.width / 2, rightBox.y + rightBox.height / 2)
-      await window.mouse.down()
-      await window.mouse.move(
-        rightBox.x + rightBox.width / 2 + 800,
-        rightBox.y + rightBox.height / 2,
-      )
-      await window.mouse.up()
+      await dragMouse(window, {
+        start: { x: rightBox.x + rightBox.width / 2, y: rightBox.y + rightBox.height / 2 },
+        end: {
+          x: rightBox.x + rightBox.width / 2 + 800,
+          y: rightBox.y + rightBox.height / 2,
+        },
+        steps: 14,
+      })
 
       const bottomResizer = terminalNode.locator('[data-testid="terminal-resizer-bottom"]')
       const bottomBox = await bottomResizer.boundingBox()
@@ -90,13 +92,14 @@ test.describe('Workspace Canvas - Spaces (Node Resize)', () => {
         throw new Error('terminal bottom resizer bounding box unavailable')
       }
 
-      await window.mouse.move(bottomBox.x + bottomBox.width / 2, bottomBox.y + bottomBox.height / 2)
-      await window.mouse.down()
-      await window.mouse.move(
-        bottomBox.x + bottomBox.width / 2,
-        bottomBox.y + bottomBox.height / 2 + 360,
-      )
-      await window.mouse.up()
+      await dragMouse(window, {
+        start: { x: bottomBox.x + bottomBox.width / 2, y: bottomBox.y + bottomBox.height / 2 },
+        end: {
+          x: bottomBox.x + bottomBox.width / 2,
+          y: bottomBox.y + bottomBox.height / 2 + 360,
+        },
+        steps: 12,
+      })
 
       const initialSpaceRect = { x: 100, y: 100, width: 600, height: 400 }
       const initialMaxWidth = initialSpaceRect.x + initialSpaceRect.width - 140

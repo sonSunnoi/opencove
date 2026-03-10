@@ -182,14 +182,11 @@ test.describe('Workspace Canvas - Spaces (Anchors & Directory Guards)', () => {
         },
       )
 
-      const pane = window.locator('.workspace-canvas .react-flow__pane')
-      await expect(pane).toBeVisible()
-      const paneBox = await pane.boundingBox()
       const spaceRegion = window.locator('.workspace-space-region').first()
       await expect(spaceRegion).toBeVisible()
       const spaceBox = await spaceRegion.boundingBox()
-      if (!paneBox || !spaceBox) {
-        throw new Error('pane/space bounding box unavailable')
+      if (!spaceBox) {
+        throw new Error('space bounding box unavailable')
       }
 
       const agentNode = window
@@ -199,12 +196,13 @@ test.describe('Workspace Canvas - Spaces (Anchors & Directory Guards)', () => {
       await expect(agentNode).toBeVisible()
       await expect(agentNode.locator('.terminal-node__badge--warning')).toHaveCount(0)
 
-      await dragLocatorTo(window, agentNode.locator('.terminal-node__header'), pane, {
+      await dragLocatorTo(window, agentNode.locator('.terminal-node__header'), spaceRegion, {
         sourcePosition: { x: 80, y: 16 },
         targetPosition: {
-          x: spaceBox.x - paneBox.x + spaceBox.width / 2,
-          y: spaceBox.y - paneBox.y + spaceBox.height / 2,
+          x: Math.min(Math.max(140, Math.round(spaceBox.width * 0.35)), spaceBox.width - 40),
+          y: Math.min(Math.max(140, Math.round(spaceBox.height * 0.45)), spaceBox.height - 40),
         },
+        steps: 18,
       })
 
       await expect(window.locator('[data-testid="app-message"]')).toContainText(

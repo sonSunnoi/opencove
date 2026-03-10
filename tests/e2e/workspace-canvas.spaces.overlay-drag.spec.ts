@@ -1,6 +1,7 @@
 import { expect, test } from '@playwright/test'
 import {
   clearAndSeedWorkspace,
+  dragMouse,
   launchApp,
   storageKey,
   testWorkspacePath,
@@ -202,10 +203,11 @@ test.describe('Workspace Canvas - Spaces (Overlay & Drag)', () => {
       const dragDx = 160
       const dragDy = 110
 
-      await window.mouse.move(startX, startY)
-      await window.mouse.down()
-      await window.mouse.move(startX + dragDx, startY + dragDy, { steps: 12 })
-      await window.mouse.up()
+      await dragMouse(window, {
+        start: { x: startX, y: startY },
+        end: { x: startX + dragDx, y: startY + dragDy },
+        steps: 12,
+      })
 
       await expect
         .poll(async () => {

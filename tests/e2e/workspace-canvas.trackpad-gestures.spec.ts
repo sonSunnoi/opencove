@@ -1,5 +1,10 @@
 import { expect, test } from '@playwright/test'
-import { clearAndSeedWorkspace, launchApp, readCanvasViewport } from './workspace-canvas.helpers'
+import {
+  clearAndSeedWorkspace,
+  dragMouse,
+  launchApp,
+  readCanvasViewport,
+} from './workspace-canvas.helpers'
 
 type WorkspaceWindow = Awaited<ReturnType<typeof launchApp>>['window']
 
@@ -73,9 +78,14 @@ test.describe('Workspace Canvas - Trackpad Gestures', () => {
         dispatch(1, 1.5, false)
       })
 
-      await pane.dragTo(pane, {
-        sourcePosition: { x: 80, y: 80 },
-        targetPosition: { x: 760, y: 560 },
+      const paneBox = await pane.boundingBox()
+      if (!paneBox) {
+        throw new Error('workspace pane bounding box unavailable')
+      }
+
+      await dragMouse(window, {
+        start: { x: paneBox.x + 80, y: paneBox.y + 80 },
+        end: { x: paneBox.x + 760, y: paneBox.y + 560 },
       })
 
       await expect(window.locator('.react-flow__node.selected')).toHaveCount(1)

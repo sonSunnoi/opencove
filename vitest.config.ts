@@ -1,5 +1,8 @@
 /// <reference types="vitest/config" />
+import { availableParallelism } from 'node:os'
 import { defineConfig } from 'vitest/config'
+
+const maxVitestWorkers = Math.max(1, Math.min(4, availableParallelism()))
 
 export default defineConfig({
   test: {
@@ -15,6 +18,9 @@ export default defineConfig({
 
     // 自动加载 setup 文件
     setupFiles: ['./tests/support/vitest.setup.ts'],
+
+    // Cap worker fan-out to avoid flaky fork startup timeouts on local and CI runs.
+    maxWorkers: maxVitestWorkers,
 
     // 包含的测试文件
     include: [
