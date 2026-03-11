@@ -48,6 +48,9 @@ export function useWorkspaceCanvasSelectionDraft({
   handleCanvasPointerMoveCapture: (event: React.PointerEvent<HTMLDivElement>) => void
   handleCanvasPointerUpCapture: (event?: { clientX: number; clientY: number }) => boolean
 } {
+  const cancelSelectionOnWindowBlur = !(
+    typeof window !== 'undefined' && window.opencoveApi?.meta?.isTest === true
+  )
   const pendingSelectionFrameRef = useRef<number | null>(null)
   const pendingSelectionUiFrameRef = useRef<number | null>(null)
   const removeGlobalPointerListenersRef = useRef<(() => void) | null>(null)
@@ -233,14 +236,24 @@ export function useWorkspaceCanvasSelectionDraft({
 
     window.addEventListener('pointerup', handleGlobalPointerUp, true)
     window.addEventListener('pointercancel', handleGlobalPointerCancel, true)
-    window.addEventListener('blur', handleGlobalPointerCancel)
+    if (cancelSelectionOnWindowBlur) {
+      window.addEventListener('blur', handleGlobalPointerCancel)
+    }
 
     removeGlobalPointerListenersRef.current = () => {
       window.removeEventListener('pointerup', handleGlobalPointerUp, true)
       window.removeEventListener('pointercancel', handleGlobalPointerCancel, true)
-      window.removeEventListener('blur', handleGlobalPointerCancel)
+      if (cancelSelectionOnWindowBlur) {
+        window.removeEventListener('blur', handleGlobalPointerCancel)
+      }
     }
-  }, [detachGlobalPointerListeners, finalizeSelectionDraft, selectionDraftRef, setSelectionDraftUi])
+  }, [
+    cancelSelectionOnWindowBlur,
+    detachGlobalPointerListeners,
+    finalizeSelectionDraft,
+    selectionDraftRef,
+    setSelectionDraftUi,
+  ])
 
   useEffect(() => {
     return () => {

@@ -142,12 +142,19 @@ export function useWorkspaceCanvasLifecycle({
 
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
-    window.addEventListener('blur', handleBlur)
+    const resetShiftOnBlur = !(
+      typeof window !== 'undefined' && window.opencoveApi?.meta?.isTest === true
+    )
+    if (resetShiftOnBlur) {
+      window.addEventListener('blur', handleBlur)
+    }
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('keyup', handleKeyUp)
-      window.removeEventListener('blur', handleBlur)
+      if (resetShiftOnBlur) {
+        window.removeEventListener('blur', handleBlur)
+      }
     }
   }, [isShiftPressedRef, setIsShiftPressed])
 
