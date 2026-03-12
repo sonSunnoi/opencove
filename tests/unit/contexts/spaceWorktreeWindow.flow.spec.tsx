@@ -129,6 +129,7 @@ describe('SpaceWorktreeWindow flow', () => {
 
     expect(await screen.findByTestId('space-worktree-create-view')).toBeVisible()
     expect(screen.queryByTestId('space-worktree-home-view')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('space-worktree-suggest-ai')).not.toBeInTheDocument()
     await waitFor(() => {
       expect(screen.getByTestId('space-worktree-create')).not.toBeDisabled()
     })

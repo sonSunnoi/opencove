@@ -1,4 +1,5 @@
 import React from 'react'
+import { AI_NAMING_FEATURES } from '@shared/featureFlags/aiNaming'
 import type { WorkspaceSpaceState } from '@contexts/workspace/presentation/renderer/types'
 import type { BranchMode, SpaceWorktreeViewMode } from './spaceWorktree.shared'
 
@@ -177,15 +178,17 @@ export function SpaceWorktreePanels({
             )}
 
             <div className="workspace-space-worktree__inline-actions">
-              <button
-                type="button"
-                className="cove-window__action cove-window__action--secondary"
-                data-testid="space-worktree-suggest-ai"
-                disabled={isBusy}
-                onClick={onSuggestNames}
-              >
-                {isSuggesting ? 'Generating...' : 'Generate by AI'}
-              </button>
+              {AI_NAMING_FEATURES.worktreeNameSuggestion ? (
+                <button
+                  type="button"
+                  className="cove-window__action cove-window__action--secondary"
+                  data-testid="space-worktree-suggest-ai"
+                  disabled={isBusy}
+                  onClick={onSuggestNames}
+                >
+                  {isSuggesting ? 'Generating...' : 'Generate by AI'}
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="cove-window__action cove-window__action--primary"

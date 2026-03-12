@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import type { AgentSettings } from '@contexts/settings/domain/agentSettings'
 import { resolveAgentModel } from '@contexts/settings/domain/agentSettings'
+import { AI_NAMING_FEATURES } from '@shared/featureFlags/aiNaming'
 import { toErrorMessage } from '@contexts/workspace/presentation/renderer/components/workspaceCanvas/helpers'
 import { getWorktreeApiMethod } from './spaceWorktree.shared'
 import type { WorkspaceSpaceState } from '@contexts/workspace/presentation/renderer/types'
@@ -25,7 +26,7 @@ export function useSpaceWorktreeSuggestNames({
   setNewBranchName: React.Dispatch<React.SetStateAction<string>>
 }): () => Promise<void> {
   return useCallback(async () => {
-    if (!space) {
+    if (!AI_NAMING_FEATURES.worktreeNameSuggestion || !space) {
       return
     }
 

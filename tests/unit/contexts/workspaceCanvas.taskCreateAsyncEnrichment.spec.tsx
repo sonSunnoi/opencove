@@ -114,13 +114,15 @@ vi.mock('../../../src/contexts/workspace/presentation/renderer/components/TaskNo
 })
 
 describe('WorkspaceCanvas task creation async enrichment', () => {
-  it('creates the task immediately and enriches AI fields in the background', async () => {
-    let resolveSuggestion: ((value: SuggestTaskTitleResult) => void) | null = null
+  it('creates the task immediately without triggering AI enrichment when naming is disabled', async () => {
     const suggestTitle = vi.fn(
-      () =>
-        new Promise<SuggestTaskTitleResult>(resolve => {
-          resolveSuggestion = resolve
-        }),
+      async (): Promise<SuggestTaskTitleResult> => ({
+        title: 'Auto: Login Retry',
+        priority: 'high',
+        tags: ['auth'],
+        provider: 'codex',
+        effectiveModel: 'gpt-5.2-codex',
+      }),
     )
 
     Object.defineProperty(window, 'opencoveApi', {
@@ -208,7 +210,7 @@ describe('WorkspaceCanvas task creation async enrichment', () => {
     fireEvent.click(screen.getByTestId('workspace-task-create-submit'))
 
     await waitFor(() => {
-      expect(suggestTitle).toHaveBeenCalledTimes(1)
+      expect(suggestTitle).not.toHaveBeenCalled()
       expect(screen.queryByTestId('workspace-task-creator')).toBeNull()
       expect(screen.getByTestId('task-node')).toBeInTheDocument()
     })
@@ -216,21 +218,6 @@ describe('WorkspaceCanvas task creation async enrichment', () => {
     expect(screen.getByTestId('task-node-title')).toHaveTextContent(fallbackTitle)
     expect(screen.getByTestId('task-node-priority')).toHaveTextContent('medium')
     expect(screen.getByTestId('task-node-tags')).toHaveTextContent('')
-    expect(screen.getByTestId('task-node-enrichment')).toBeInTheDocument()
-
-    resolveSuggestion?.({
-      title: 'Auto: Login Retry',
-      priority: 'high',
-      tags: ['auth'],
-      provider: 'codex',
-      effectiveModel: 'gpt-5.2-codex',
-    })
-
-    await waitFor(() => {
-      expect(screen.getByTestId('task-node-title')).toHaveTextContent('Auto: Login Retry')
-      expect(screen.getByTestId('task-node-priority')).toHaveTextContent('high')
-      expect(screen.getByTestId('task-node-tags')).toHaveTextContent('auth')
-      expect(screen.queryByTestId('task-node-enrichment')).toBeNull()
-    })
+    expect(screen.queryByTestId('task-node-enrichment')).toBeNull()
   })
 })

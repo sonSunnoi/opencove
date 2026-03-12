@@ -1,4 +1,5 @@
 import React, { type Dispatch, type SetStateAction } from 'react'
+import { AI_NAMING_FEATURES } from '@shared/featureFlags/aiNaming'
 import type { TaskPriority } from '../../../types'
 import { TASK_PRIORITY_OPTIONS } from '../constants'
 import { normalizeTaskTagSelection } from '../helpers'
@@ -25,6 +26,8 @@ export function TaskEditorWindow({
   generateTaskEditorTitle,
   saveTaskEdits,
 }: TaskEditorWindowProps): React.JSX.Element | null {
+  const isTaskAiNamingEnabled = AI_NAMING_FEATURES.taskTitleGeneration
+
   if (!taskEditor) {
     return null
   }
@@ -44,18 +47,22 @@ export function TaskEditorWindow({
         }}
       >
         <h3>Edit Task</h3>
-        <p className="workspace-task-creator__meta">
-          Auto-task provider: {taskTitleProviderLabel} · Model: {taskTitleModelLabel}
-        </p>
+        {isTaskAiNamingEnabled ? (
+          <p className="workspace-task-creator__meta">
+            Auto-task provider: {taskTitleProviderLabel} · Model: {taskTitleModelLabel}
+          </p>
+        ) : null}
 
         <div className="workspace-task-creator__field-row">
-          <label htmlFor="workspace-task-editor-title">Task Name (optional)</label>
+          <label htmlFor="workspace-task-editor-title">
+            {isTaskAiNamingEnabled ? 'Task Name (optional)' : 'Task Name'}
+          </label>
           <input
             id="workspace-task-editor-title"
             data-testid="workspace-task-editor-title"
             value={taskEditor.title}
             disabled={taskEditor.isSaving || taskEditor.isGeneratingTitle}
-            placeholder="Leave empty to auto-generate"
+            placeholder={isTaskAiNamingEnabled ? 'Leave empty to auto-generate' : 'Enter task name'}
             onChange={event => {
               const nextValue = event.target.value
               setTaskEditor(prev =>
@@ -173,25 +180,27 @@ export function TaskEditorWindow({
           </div>
         </div>
 
-        <label className="cove-window__checkbox workspace-task-creator__checkbox">
-          <input
-            type="checkbox"
-            data-testid="workspace-task-editor-auto-generate-title"
-            checked={taskEditor.autoGenerateTitle}
-            disabled={taskEditor.isSaving || taskEditor.isGeneratingTitle}
-            onChange={event => {
-              setTaskEditor(prev =>
-                prev
-                  ? {
-                      ...prev,
-                      autoGenerateTitle: event.target.checked,
-                    }
-                  : prev,
-              )
-            }}
-          />
-          <span>Auto-generate title/priority/tags when title is empty</span>
-        </label>
+        {isTaskAiNamingEnabled ? (
+          <label className="cove-window__checkbox workspace-task-creator__checkbox">
+            <input
+              type="checkbox"
+              data-testid="workspace-task-editor-auto-generate-title"
+              checked={taskEditor.autoGenerateTitle}
+              disabled={taskEditor.isSaving || taskEditor.isGeneratingTitle}
+              onChange={event => {
+                setTaskEditor(prev =>
+                  prev
+                    ? {
+                        ...prev,
+                        autoGenerateTitle: event.target.checked,
+                      }
+                    : prev,
+                )
+              }}
+            />
+            <span>Auto-generate title/priority/tags when title is empty</span>
+          </label>
+        ) : null}
 
         {taskEditor.error ? (
           <p className="cove-window__error workspace-task-creator__error">{taskEditor.error}</p>
@@ -209,17 +218,19 @@ export function TaskEditorWindow({
           >
             Cancel
           </button>
-          <button
-            type="button"
-            className="cove-window__action cove-window__action--secondary workspace-task-creator__action workspace-task-creator__action--secondary"
-            data-testid="workspace-task-edit-generate-title"
-            disabled={taskEditor.isSaving || taskEditor.isGeneratingTitle}
-            onClick={() => {
-              void generateTaskEditorTitle()
-            }}
-          >
-            {taskEditor.isGeneratingTitle ? 'Generating...' : 'Generate by AI'}
-          </button>
+          {isTaskAiNamingEnabled ? (
+            <button
+              type="button"
+              className="cove-window__action cove-window__action--secondary workspace-task-creator__action workspace-task-creator__action--secondary"
+              data-testid="workspace-task-edit-generate-title"
+              disabled={taskEditor.isSaving || taskEditor.isGeneratingTitle}
+              onClick={() => {
+                void generateTaskEditorTitle()
+              }}
+            >
+              {taskEditor.isGeneratingTitle ? 'Generating...' : 'Generate by AI'}
+            </button>
+          ) : null}
           <button
             type="button"
             className="cove-window__action cove-window__action--primary workspace-task-creator__action workspace-task-creator__action--primary"

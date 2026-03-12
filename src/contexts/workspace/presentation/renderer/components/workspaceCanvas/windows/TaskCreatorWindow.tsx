@@ -1,4 +1,5 @@
 import React, { useLayoutEffect, useState, type Dispatch, type SetStateAction } from 'react'
+import { AI_NAMING_FEATURES } from '@shared/featureFlags/aiNaming'
 import type { TaskPriority } from '../../../types'
 import { TASK_PRIORITY_OPTIONS } from '../constants'
 import { normalizeTaskTagSelection } from '../helpers'
@@ -26,6 +27,7 @@ export function TaskCreatorWindow({
   createTask,
 }: TaskCreatorWindowProps): React.JSX.Element | null {
   const [isAdvancedSettingsVisible, setIsAdvancedSettingsVisible] = useState(false)
+  const isTaskAiNamingEnabled = AI_NAMING_FEATURES.taskTitleGeneration
 
   useLayoutEffect(() => {
     if (!taskCreator) {
@@ -81,18 +83,28 @@ export function TaskCreatorWindow({
 
         {isAdvancedSettingsVisible ? (
           <>
-            <p className="workspace-task-creator__meta">
-              Auto-task provider: {taskTitleProviderLabel} · Model: {taskTitleModelLabel}
-            </p>
+            {isTaskAiNamingEnabled ? (
+              <p className="workspace-task-creator__meta">
+                Auto-task provider: {taskTitleProviderLabel} · Model: {taskTitleModelLabel}
+              </p>
+            ) : null}
 
             <div className="workspace-task-creator__field-row">
-              <label htmlFor="workspace-task-title">Task Name (optional)</label>
+              <label htmlFor="workspace-task-title">
+                {isTaskAiNamingEnabled
+                  ? 'Task Name (optional)'
+                  : 'Task Name (optional, defaults to requirement summary)'}
+              </label>
               <input
                 id="workspace-task-title"
                 data-testid="workspace-task-title"
                 value={taskCreator.title}
                 disabled={taskCreator.isCreating || taskCreator.isGeneratingTitle}
-                placeholder="Leave empty to auto-generate"
+                placeholder={
+                  isTaskAiNamingEnabled
+                    ? 'Leave empty to auto-generate'
+                    : 'Leave empty to use a requirement summary'
+                }
                 onChange={event => {
                   const nextValue = event.target.value
                   setTaskCreator(prev =>
@@ -187,25 +199,27 @@ export function TaskCreatorWindow({
               </div>
             </div>
 
-            <label className="cove-window__checkbox workspace-task-creator__checkbox">
-              <input
-                type="checkbox"
-                data-testid="workspace-task-auto-generate-title"
-                checked={taskCreator.autoGenerateTitle}
-                disabled={taskCreator.isCreating || taskCreator.isGeneratingTitle}
-                onChange={event => {
-                  setTaskCreator(prev =>
-                    prev
-                      ? {
-                          ...prev,
-                          autoGenerateTitle: event.target.checked,
-                        }
-                      : prev,
-                  )
-                }}
-              />
-              <span>Auto-fill title/priority/tags by AI after creating</span>
-            </label>
+            {isTaskAiNamingEnabled ? (
+              <label className="cove-window__checkbox workspace-task-creator__checkbox">
+                <input
+                  type="checkbox"
+                  data-testid="workspace-task-auto-generate-title"
+                  checked={taskCreator.autoGenerateTitle}
+                  disabled={taskCreator.isCreating || taskCreator.isGeneratingTitle}
+                  onChange={event => {
+                    setTaskCreator(prev =>
+                      prev
+                        ? {
+                            ...prev,
+                            autoGenerateTitle: event.target.checked,
+                          }
+                        : prev,
+                    )
+                  }}
+                />
+                <span>Auto-fill title/priority/tags by AI after creating</span>
+              </label>
+            ) : null}
           </>
         ) : null}
 
@@ -225,7 +239,7 @@ export function TaskCreatorWindow({
           >
             {isAdvancedSettingsVisible ? 'Hide Advanced' : 'Advanced'}
           </button>
-          {isAdvancedSettingsVisible ? (
+          {isAdvancedSettingsVisible && isTaskAiNamingEnabled ? (
             <button
               type="button"
               className="cove-window__action cove-window__action--secondary workspace-task-creator__action workspace-task-creator__action--secondary"

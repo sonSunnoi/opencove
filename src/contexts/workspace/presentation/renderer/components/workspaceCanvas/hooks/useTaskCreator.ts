@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react'
 import type { Node } from '@xyflow/react'
+import { AI_NAMING_FEATURES } from '@shared/featureFlags/aiNaming'
 import type { Point, TaskPriority, TerminalNodeData, WorkspaceSpaceState } from '../../../types'
 import { normalizeTaskTagSelection, sanitizeSpaces, toErrorMessage } from '../helpers'
 import type { ContextMenuState, TaskCreatorState } from '../types'
@@ -52,6 +53,7 @@ export function useWorkspaceCanvasTaskCreator({
   createTask: () => Promise<void>
 } {
   const [taskCreator, setTaskCreator] = useState<TaskCreatorState | null>(null)
+  const isTaskAiNamingEnabled = AI_NAMING_FEATURES.taskTitleGeneration
 
   const fallbackTaskTitle = useCallback((requirement: string): string => {
     const cleaned = requirement.replace(/\s+/g, ' ').trim()
@@ -80,14 +82,14 @@ export function useWorkspaceCanvasTaskCreator({
       requirement: '',
       priority: 'medium',
       selectedTags: [],
-      autoGenerateTitle: true,
+      autoGenerateTitle: isTaskAiNamingEnabled,
       isGeneratingTitle: false,
       isCreating: false,
       error: null,
     })
 
     setContextMenu(null)
-  }, [contextMenu, setContextMenu])
+  }, [contextMenu, isTaskAiNamingEnabled, setContextMenu])
 
   const closeTaskCreator = useCallback(() => {
     setTaskCreator(prev => {
@@ -101,6 +103,10 @@ export function useWorkspaceCanvasTaskCreator({
 
   const generateTaskTitle = useCallback(async () => {
     if (!taskCreator) {
+      return
+    }
+
+    if (!isTaskAiNamingEnabled) {
       return
     }
 
@@ -152,7 +158,7 @@ export function useWorkspaceCanvasTaskCreator({
           : prev,
       )
     }
-  }, [suggestTaskTitle, taskCreator])
+  }, [isTaskAiNamingEnabled, suggestTaskTitle, taskCreator])
 
   const createTask = useCallback(async () => {
     if (!taskCreator) {
@@ -192,6 +198,7 @@ export function useWorkspaceCanvasTaskCreator({
       const shouldAutoFillTags = selectedTags.length === 0
 
       const shouldAutoFill =
+        isTaskAiNamingEnabled &&
         taskCreator.autoGenerateTitle &&
         (shouldAutoFillTitle || shouldAutoFillPriority || shouldAutoFillTags)
 
@@ -441,6 +448,7 @@ export function useWorkspaceCanvasTaskCreator({
     onSpacesChange,
     setNodes,
     spacesRef,
+    isTaskAiNamingEnabled,
     suggestTaskTitle,
     taskCreator,
     taskTagOptions,

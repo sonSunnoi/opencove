@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react'
+import { AI_NAMING_FEATURES } from '@shared/featureFlags/aiNaming'
 import {
   resolveTaskTitleProvider,
   type AgentProvider,
@@ -276,14 +277,16 @@ export function SettingsPanel({
               onChangeTerminalFontSize={updateTerminalFontSize}
               onChangeUiFontSize={updateUiFontSize}
             />
-            <TaskTitleSection
-              defaultProvider={settings.defaultProvider}
-              taskTitleProvider={settings.taskTitleProvider}
-              taskTitleModel={settings.taskTitleModel}
-              effectiveTaskTitleProvider={effectiveTaskTitleProvider}
-              onChangeTaskTitleProvider={updateTaskTitleProvider}
-              onChangeTaskTitleModel={updateTaskTitleModel}
-            />
+            {AI_NAMING_FEATURES.taskTitleGeneration ? (
+              <TaskTitleSection
+                defaultProvider={settings.defaultProvider}
+                taskTitleProvider={settings.taskTitleProvider}
+                taskTitleModel={settings.taskTitleModel}
+                effectiveTaskTitleProvider={effectiveTaskTitleProvider}
+                onChangeTaskTitleProvider={updateTaskTitleProvider}
+                onChangeTaskTitleModel={updateTaskTitleModel}
+              />
+            ) : null}
             <ModelOverrideSection
               settings={settings}
               modelCatalogByProvider={modelCatalogByProvider}

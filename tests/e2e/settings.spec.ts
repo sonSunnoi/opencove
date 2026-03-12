@@ -58,11 +58,7 @@ test.describe('Settings', () => {
         'feature',
       )
 
-      const taskTitleProvider = window.locator('[data-testid="settings-task-title-provider"]')
-      await taskTitleProvider.selectOption('codex')
-
-      const taskTitleModel = window.locator('[data-testid="settings-task-title-model"]')
-      await taskTitleModel.fill('gpt-5.2-codex')
+      await expect(window.locator('#settings-section-task-title')).toHaveCount(0)
 
       const normalizeZoomToggle = window.locator(
         '[data-testid="settings-normalize-zoom-on-terminal-click"]',
@@ -108,8 +104,6 @@ test.describe('Settings', () => {
                 customModelOptionsByProvider?: {
                   codex?: string[]
                 }
-                taskTitleProvider?: string
-                taskTitleModel?: string
                 taskTagOptions?: string[]
                 normalizeZoomOnTerminalClick?: boolean
                 canvasInputMode?: string
@@ -124,8 +118,6 @@ test.describe('Settings', () => {
       await expect.poll(readPersistedSettings).toEqual(
         expect.objectContaining({
           defaultProvider: 'codex',
-          taskTitleProvider: 'codex',
-          taskTitleModel: 'gpt-5.2-codex',
           normalizeZoomOnTerminalClick: false,
           canvasInputMode: 'trackpad',
         }),
@@ -141,8 +133,6 @@ test.describe('Settings', () => {
       expect(persistedSettings?.customModelEnabledByProvider?.codex).toBe(true)
       expect(persistedSettings?.customModelByProvider?.codex).toBe('gpt-5.2-codex')
       expect(persistedSettings?.customModelOptionsByProvider?.codex).toContain('gpt-5.2-codex')
-      expect(persistedSettings?.taskTitleProvider).toBe('codex')
-      expect(persistedSettings?.taskTitleModel).toBe('gpt-5.2-codex')
       expect(persistedSettings?.taskTagOptions).toContain('ops')
       expect(persistedSettings?.taskTagOptions).not.toContain('feature')
       expect(persistedSettings?.normalizeZoomOnTerminalClick).toBe(false)
