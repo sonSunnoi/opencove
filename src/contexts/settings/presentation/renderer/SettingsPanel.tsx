@@ -9,8 +9,7 @@ import {
 import { CanvasSection } from './settingsPanel/CanvasSection'
 import { GeneralSection } from './settingsPanel/GeneralSection'
 import { ModelOverrideSection } from './settingsPanel/ModelOverrideSection'
-import { TaskTagsSection } from './settingsPanel/TaskTagsSection'
-import { TaskTitleSection } from './settingsPanel/TaskTitleSection'
+import { TaskConfigurationSection } from './settingsPanel/TaskConfigurationSection'
 import { WorkspaceSection } from './settingsPanel/WorkspaceSection'
 import type { WorkspaceState } from '@contexts/workspace/presentation/renderer/types'
 
@@ -31,7 +30,7 @@ interface SettingsPanelProps {
   onClose: () => void
 }
 
-type CoreSectionId = 'general' | 'canvas' | 'task-tags'
+type CoreSectionId = 'general' | 'canvas' | 'task-configuration' | 'model-overrides'
 type SettingsSectionId = CoreSectionId | string
 
 function createInitialInputState(): Record<AgentProvider, string> {
@@ -217,26 +216,20 @@ export function SettingsPanel({
             testId="settings-section-nav-canvas"
           />
           <NavButton
-            id="task-tags"
-            label="Task Tags"
-            targetId="settings-section-task-tags"
-            testId="settings-section-nav-task-tags"
+            id="task-configuration"
+            label="Tasks"
+            targetId="settings-section-task-configuration"
+            testId="settings-section-nav-task-configuration"
+          />
+          <NavButton
+            id="model-overrides"
+            label="Models"
+            targetId="settings-section-model-override"
+            testId="settings-section-nav-model-overrides"
           />
 
-          <div style={{ marginTop: '24px', padding: '0 16px' }}>
-            <span
-              style={{
-                fontSize: '11px',
-                fontWeight: 600,
-                color: '#444',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-              }}
-            >
-              Projects
-            </span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', marginTop: '8px' }}>
+          <div className="settings-panel__nav-group-label">Projects</div>
+          <div className="settings-panel__nav-group">
             {workspaces.map(workspace => (
               <NavButton
                 key={workspace.id}
@@ -276,13 +269,18 @@ export function SettingsPanel({
               onChangeTerminalFontSize={updateTerminalFontSize}
               onChangeUiFontSize={updateUiFontSize}
             />
-            <TaskTitleSection
+            <TaskConfigurationSection
               defaultProvider={settings.defaultProvider}
               taskTitleProvider={settings.taskTitleProvider}
               taskTitleModel={settings.taskTitleModel}
               effectiveTaskTitleProvider={effectiveTaskTitleProvider}
+              tags={settings.taskTagOptions}
+              addTaskTagInput={addTaskTagInput}
               onChangeTaskTitleProvider={updateTaskTitleProvider}
               onChangeTaskTitleModel={updateTaskTitleModel}
+              onChangeAddTaskTagInput={setAddTaskTagInput}
+              onAddTag={addTaskTagOption}
+              onRemoveTag={removeTaskTagOption}
             />
             <ModelOverrideSection
               settings={settings}
@@ -293,13 +291,6 @@ export function SettingsPanel({
               onRemoveCustomModelOption={removeCustomModelOption}
               onChangeAddModelInput={updateAddModelInput}
               onAddCustomModelOption={addCustomModelOption}
-            />
-            <TaskTagsSection
-              tags={settings.taskTagOptions}
-              addTaskTagInput={addTaskTagInput}
-              onChangeAddTaskTagInput={setAddTaskTagInput}
-              onAddTag={addTaskTagOption}
-              onRemoveTag={removeTaskTagOption}
             />
             {workspaces.map(workspace => (
               <WorkspaceSection

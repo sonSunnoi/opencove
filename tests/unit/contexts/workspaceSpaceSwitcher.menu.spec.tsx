@@ -6,6 +6,10 @@ import { WorkspaceSpaceRegionsOverlay } from '../../../src/contexts/workspace/pr
 vi.mock('@xyflow/react', () => {
   return {
     ViewportPortal: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+    useReactFlow: () => ({
+      screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x, y }),
+      getZoom: () => 1,
+    }),
   }
 })
 

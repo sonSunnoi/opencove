@@ -1,4 +1,5 @@
 import React from 'react'
+import { GitBranch, X } from 'lucide-react'
 import type { GitWorktreeInfo } from '@shared/contracts/dto'
 import type { WorkspaceSpaceState } from '@contexts/workspace/presentation/renderer/types'
 import { SpaceWorktreePanels } from './SpaceWorktreePanels'
@@ -63,6 +64,15 @@ export function SpaceWorktreeWindowDialog({
   onArchiveSpaceOnArchiveChange: (checked: boolean) => void
   onArchive: () => void
 }): React.JSX.Element {
+  const statusLabel = currentWorktree?.branch?.trim()
+    ? currentWorktree.branch
+    : isSpaceOnWorkspaceRoot
+      ? 'Workspace root'
+      : currentWorktree?.head?.trim()
+        ? currentWorktree.head.slice(0, 7)
+        : 'Detached HEAD'
+  const statusContext = isSpaceOnWorkspaceRoot ? 'root' : 'worktree'
+
   return (
     <div
       className="cove-window-backdrop workspace-space-worktree-backdrop"
@@ -82,21 +92,29 @@ export function SpaceWorktreeWindowDialog({
         }}
       >
         <header className="workspace-space-worktree__header">
-          <h3>Space Workspace</h3>
-          <p className="workspace-space-worktree__meta">
-            {isSpaceOnWorkspaceRoot
-              ? `${space.name} is using the workspace root.`
-              : `${space.name} is bound to an OpenCove-managed worktree.`}
-          </p>
-          <div className="workspace-space-worktree__status-row">
-            <span className="workspace-space-worktree__status-chip">
-              {isSpaceOnWorkspaceRoot ? 'Workspace Root' : 'Managed Worktree'}
-            </span>
-            {currentWorktree?.branch ? (
-              <span className="workspace-space-worktree__status-chip workspace-space-worktree__status-chip--branch">
-                Branch: {currentWorktree.branch}
+          <div className="workspace-space-worktree__header-main">
+            <h3>{space.name}</h3>
+            <div
+              className="workspace-space-worktree__status-line"
+              data-testid="space-worktree-status"
+            >
+              <GitBranch size={14} aria-hidden="true" />
+              <span>{statusLabel}</span>
+              <span className="workspace-space-worktree__status-separator" aria-hidden="true">
+                /
               </span>
-            ) : null}
+              <span className="workspace-space-worktree__status-context">{statusContext}</span>
+            </div>
+            <button
+              type="button"
+              className="workspace-space-worktree__close"
+              data-testid="space-worktree-close"
+              aria-label="Close worktree window"
+              disabled={isBusy || guardIsBusy}
+              onClick={onClose}
+            >
+              <X size={16} aria-hidden="true" />
+            </button>
           </div>
         </header>
 
@@ -115,7 +133,6 @@ export function SpaceWorktreeWindowDialog({
           existingBranchName={existingBranchName}
           deleteBranchOnArchive={deleteBranchOnArchive}
           archiveSpaceOnArchive={archiveSpaceOnArchive}
-          onClose={onClose}
           onBranchModeChange={onBranchModeChange}
           onNewBranchNameChange={onNewBranchNameChange}
           onStartPointChange={onStartPointChange}
@@ -130,18 +147,6 @@ export function SpaceWorktreeWindowDialog({
         {error ? (
           <p className="cove-window__error workspace-space-worktree__error">{error}</p>
         ) : null}
-
-        <div className="cove-window__actions workspace-space-worktree__actions">
-          <button
-            type="button"
-            className="cove-window__action cove-window__action--ghost"
-            data-testid="space-worktree-close"
-            disabled={isBusy || guardIsBusy}
-            onClick={onClose}
-          >
-            Close
-          </button>
-        </div>
       </section>
     </div>
   )
