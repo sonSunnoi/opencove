@@ -99,6 +99,14 @@ Read our guidelines below:
 - [Code of Conduct (CODE_OF_CONDUCT.md)](./CODE_OF_CONDUCT.md)
 - [Support (SUPPORT.md)](./SUPPORT.md)
 
+## 💬 Community Group
+
+Scan the QR code below to join the OpenCove community group and chat with other users.
+
+<div align="center">
+  <img src="./assets/images/opencove_qrcode.png" alt="OpenCove Community Group QR Code" width="320" />
+</div>
+
 ---
 
 <div align="center">
