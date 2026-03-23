@@ -25,6 +25,7 @@ import { resolveTerminalNodeInteraction } from './terminalNode/interaction'
 import { resolveTerminalNodeFrameStyle } from './terminalNode/nodeFrameStyle'
 import { resolveActiveUiTheme, resolveTerminalTheme } from './terminalNode/theme'
 import { registerTerminalSelectionTestHandle } from './terminalNode/testHarness'
+import { patchXtermMouseServiceWithRetry } from './terminalNode/patchXtermMouseService'
 import { useTerminalBodyClickFallback } from './terminalNode/useTerminalBodyClickFallback'
 import { useTerminalResize } from './terminalNode/useTerminalResize'
 import { useTerminalScrollback } from './terminalNode/useScrollback'
@@ -171,9 +172,11 @@ export function TerminalNode({
         terminal,
       }),
     )
+    let cancelMouseServicePatch: () => void = () => undefined
     if (containerRef.current) {
       terminal.open(containerRef.current)
       containerRef.current.setAttribute('data-cove-terminal-theme', resolveActiveUiTheme())
+      cancelMouseServicePatch = patchXtermMouseServiceWithRetry(terminal)
       if (window.opencoveApi.meta.isTest) {
         disposeTerminalSelectionTestHandle = registerTerminalSelectionTestHandle(nodeId, terminal)
       }
@@ -361,6 +364,7 @@ export function TerminalNode({
         }
       }
 
+      cancelMouseServicePatch()
       isDisposed = true
       const detachPromise = ptyWithOptionalAttach.detach?.({ sessionId })
       void detachPromise?.catch(() => undefined)

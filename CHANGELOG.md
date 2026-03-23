@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Settings → Integrations tab with a GitHub PR links toggle (default on).
 - In-app update checker with stable/nightly tracking (nightly supports prompt only) plus a first-launch “What’s New” sheet after updates. (#49)
 - Workspace canvas: Label colors for Spaces and windows, plus a single-color filter. (#54)
+- Settings: configurable focus target zoom with slider-only live preview and neutral 100% marker. (#56)
 
 ### 💅 Changed
 - Simplified GitHub PR integration to a link-only chip (removed in-canvas PR panel/actions/diff/checks UI for now).
@@ -31,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Worktree window: Fixed light theme text colors in the create/archive dialog. (#47)
 - Task: Typing in the Task Name input no longer collapses Advanced Settings. (#48)
 - Improved canvas drag smoothness under heavy terminal output by throttling terminal screen writes during viewport interaction while keeping output live. (#50)
+- Normalized node resize and terminal selection drags while the canvas is zoomed. (#56)
 
 ---
 

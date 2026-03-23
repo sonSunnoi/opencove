@@ -1,9 +1,17 @@
 import type { AppUpdateChannel, AppUpdatePolicy } from '../../../shared/contracts/dto'
+import { normalizeFocusNodeTargetZoom, type FocusNodeTargetZoom } from './focusNodeTargetZoom'
 import {
   isValidUpdateChannel,
   isValidUpdatePolicy,
   normalizeUpdatePolicyForChannel,
 } from './updateSettings'
+
+export {
+  FOCUS_NODE_TARGET_ZOOM_STEP,
+  MAX_FOCUS_NODE_TARGET_ZOOM,
+  MIN_FOCUS_NODE_TARGET_ZOOM,
+} from './focusNodeTargetZoom'
+export type { FocusNodeTargetZoom } from './focusNodeTargetZoom'
 
 export const AGENT_PROVIDERS = ['claude-code', 'codex', 'opencode', 'gemini'] as const
 export const TASK_TITLE_PROVIDERS = ['claude-code', 'codex'] as const
@@ -110,7 +118,8 @@ export interface AgentSettings {
   taskTitleProvider: TaskTitleProvider
   taskTitleModel: string
   taskTagOptions: string[]
-  normalizeZoomOnTerminalClick: boolean
+  focusNodeOnClick: boolean
+  focusNodeTargetZoom: FocusNodeTargetZoom
   canvasInputMode: CanvasInputMode
   defaultTerminalWindowScalePercent: number
   terminalFontSize: number
@@ -151,7 +160,8 @@ export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
   taskTitleProvider: 'default',
   taskTitleModel: '',
   taskTagOptions: ['feature', 'bug', 'refactor', 'docs', 'test'],
-  normalizeZoomOnTerminalClick: true,
+  focusNodeOnClick: true,
+  focusNodeTargetZoom: 1,
   canvasInputMode: 'auto',
   defaultTerminalWindowScalePercent: 80,
   terminalFontSize: 13,
@@ -423,9 +433,14 @@ export function normalizeAgentSettings(value: unknown): AgentSettings {
     value.taskTagOptions,
     DEFAULT_AGENT_SETTINGS.taskTagOptions,
   )
-  const normalizeZoomOnTerminalClick =
+  const focusNodeOnClick =
+    normalizeBoolean(value.focusNodeOnClick) ??
     normalizeBoolean(value.normalizeZoomOnTerminalClick) ??
-    DEFAULT_AGENT_SETTINGS.normalizeZoomOnTerminalClick
+    DEFAULT_AGENT_SETTINGS.focusNodeOnClick
+  const focusNodeTargetZoom = normalizeFocusNodeTargetZoom(
+    value.focusNodeTargetZoom,
+    DEFAULT_AGENT_SETTINGS.focusNodeTargetZoom,
+  )
   const canvasInputMode = isValidCanvasInputMode(value.canvasInputMode)
     ? value.canvasInputMode
     : DEFAULT_AGENT_SETTINGS.canvasInputMode
@@ -490,7 +505,8 @@ export function normalizeAgentSettings(value: unknown): AgentSettings {
     taskTitleProvider,
     taskTitleModel,
     taskTagOptions,
-    normalizeZoomOnTerminalClick,
+    focusNodeOnClick,
+    focusNodeTargetZoom,
     canvasInputMode,
     defaultTerminalWindowScalePercent,
     terminalFontSize,

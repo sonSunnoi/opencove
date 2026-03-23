@@ -8,6 +8,7 @@ import {
   type AgentProvider,
   type AgentSettings,
   type CanvasInputMode,
+  type FocusNodeTargetZoom,
   type TaskTitleProvider,
   type UiLanguage,
   type UiTheme,
@@ -36,6 +37,8 @@ interface SettingsPanelProps {
   modelCatalogByProvider: Record<AgentProvider, ProviderModelCatalogEntry>
   workspaces: WorkspaceState[]
   onWorkspaceWorktreesRootChange: (workspaceId: string, worktreesRoot: string) => void
+  isFocusNodeTargetZoomPreviewing: boolean
+  onFocusNodeTargetZoomPreviewChange: (isPreviewing: boolean) => void
   onChange: (settings: AgentSettings) => void
   onCheckForUpdates: () => void
   onDownloadUpdate: () => void
@@ -76,6 +79,8 @@ export function SettingsPanel({
   modelCatalogByProvider,
   workspaces,
   onWorkspaceWorktreesRootChange,
+  isFocusNodeTargetZoomPreviewing,
+  onFocusNodeTargetZoomPreviewChange,
   onChange,
   onCheckForUpdates,
   onDownloadUpdate,
@@ -105,8 +110,10 @@ export function SettingsPanel({
     onChange({ ...settings, taskTitleProvider: provider })
   const updateTaskTitleModel = (model: string): void =>
     onChange({ ...settings, taskTitleModel: model })
-  const updateNormalizeZoomOnTerminalClick = (enabled: boolean): void =>
-    onChange({ ...settings, normalizeZoomOnTerminalClick: enabled })
+  const updateFocusNodeOnClick = (enabled: boolean): void =>
+    onChange({ ...settings, focusNodeOnClick: enabled })
+  const updateFocusNodeTargetZoom = (zoom: FocusNodeTargetZoom): void =>
+    onChange({ ...settings, focusNodeTargetZoom: zoom })
   const updateCanvasInputMode = (mode: CanvasInputMode): void =>
     onChange({ ...settings, canvasInputMode: mode })
   const updateDefaultTerminalWindowScalePercent = (percent: number): void =>
@@ -241,6 +248,12 @@ export function SettingsPanel({
     contentRef.current.scrollTop = 0
   }, [activePageId])
 
+  useEffect(() => {
+    if (activePageId !== 'canvas') {
+      onFocusNodeTargetZoomPreviewChange(false)
+    }
+  }, [activePageId, onFocusNodeTargetZoomPreviewChange])
+
   const NavButton = ({
     id,
     label,
@@ -264,8 +277,14 @@ export function SettingsPanel({
   }
 
   return (
-    <div className="settings-backdrop" onClick={onClose}>
-      <section className="settings-panel" onClick={e => e.stopPropagation()}>
+    <div
+      className={`settings-backdrop${isFocusNodeTargetZoomPreviewing ? ' settings-backdrop--preview' : ''}`}
+      onClick={onClose}
+    >
+      <section
+        className={`settings-panel${isFocusNodeTargetZoomPreviewing ? ' settings-panel--preview' : ''}`}
+        onClick={e => e.stopPropagation()}
+      >
         <aside
           className="settings-panel__sidebar"
           aria-label={t('settingsPanel.nav.sectionsLabel')}
@@ -372,14 +391,17 @@ export function SettingsPanel({
             {activePageId === 'canvas' ? (
               <CanvasSection
                 canvasInputMode={settings.canvasInputMode}
-                normalizeZoomOnTerminalClick={settings.normalizeZoomOnTerminalClick}
+                focusNodeOnClick={settings.focusNodeOnClick}
+                focusNodeTargetZoom={settings.focusNodeTargetZoom}
                 defaultTerminalWindowScalePercent={settings.defaultTerminalWindowScalePercent}
                 defaultTerminalProfileId={settings.defaultTerminalProfileId}
                 terminalProfiles={terminalProfiles}
                 detectedDefaultTerminalProfileId={detectedDefaultTerminalProfileId}
                 onChangeCanvasInputMode={updateCanvasInputMode}
                 onChangeDefaultTerminalProfileId={updateDefaultTerminalProfileId}
-                onChangeNormalizeZoomOnTerminalClick={updateNormalizeZoomOnTerminalClick}
+                onChangeFocusNodeOnClick={updateFocusNodeOnClick}
+                onChangeFocusNodeTargetZoom={updateFocusNodeTargetZoom}
+                onFocusNodeTargetZoomPreviewChange={onFocusNodeTargetZoomPreviewChange}
                 onChangeDefaultTerminalWindowScalePercent={updateDefaultTerminalWindowScalePercent}
               />
             ) : null}

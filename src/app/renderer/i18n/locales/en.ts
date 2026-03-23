@@ -226,8 +226,11 @@ export const en = {
         mouse: 'Mouse',
       },
       initialWindowSize: 'Initial Window Size',
-      autoZoomLabel: 'Auto-zoom on Click',
-      autoZoomHelp: 'Zoom to 100% when a node is clicked.',
+      focusOnClickLabel: 'Auto-focus on Click',
+      focusOnClickHelp: 'Center the canvas on a node when it is clicked.',
+      focusTargetZoomLabel: 'Target Zoom',
+      focusTargetZoomHelp:
+        'Zoom level used after auto-focus. Drag the slider to preview while adjusting.',
     },
     tasks: {
       title: 'Task Configuration',

@@ -20,6 +20,7 @@ export function WorkspaceCanvasInner({
   onViewportChange,
   onMinimapVisibilityChange,
   agentSettings,
+  isFocusNodeTargetZoomPreviewing = false,
   focusNodeId,
   focusSequence,
 }: WorkspaceCanvasProps): React.JSX.Element {
@@ -289,6 +290,8 @@ export function WorkspaceCanvasInner({
     requestNodeDeleteRef: actionRefs.requestNodeDeleteRef,
     focusNodeId,
     focusSequence,
+    focusNodeTargetZoom: agentSettings.focusNodeTargetZoom,
+    isFocusNodeTargetZoomPreviewing,
     nodesRef,
   })
   workspaceCanvasHooks.useWorkspaceCanvasPtyTaskCompletion({ setNodes, onRequestPersistFlush })
@@ -319,7 +322,8 @@ export function WorkspaceCanvasInner({
     createNoteNodeFromContextMenu,
   } = workspaceCanvasHooks.useWorkspaceCanvasInteractions({
     isTrackpadCanvasMode,
-    normalizeZoomOnNodeClick: agentSettings.normalizeZoomOnTerminalClick,
+    focusNodeOnClick: agentSettings.focusNodeOnClick,
+    focusNodeTargetZoom: agentSettings.focusNodeTargetZoom,
     defaultTerminalWindowScalePercent: agentSettings.defaultTerminalWindowScalePercent,
     isShiftPressedRef,
     selectionDraftRef,
@@ -370,7 +374,8 @@ export function WorkspaceCanvasInner({
     updateNodeScrollback,
     updateTerminalTitle,
     renameTerminalTitle,
-    normalizeZoomOnTerminalClick: agentSettings.normalizeZoomOnTerminalClick,
+    focusNodeOnClick: agentSettings.focusNodeOnClick,
+    focusNodeTargetZoom: agentSettings.focusNodeTargetZoom,
     nodesRef,
     reactFlow,
   })
