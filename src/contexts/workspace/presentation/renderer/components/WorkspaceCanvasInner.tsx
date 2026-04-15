@@ -72,6 +72,7 @@ export function WorkspaceCanvasInner({
     onActiveSpaceChange,
     workspacePath,
     focusNodeTargetZoom: agentSettings.focusNodeTargetZoom,
+    standardWindowSizeBucket: agentSettings.standardWindowSizeBucket,
     reactFlow,
     nodes: canvasState.flowNodes,
     nodesRef: nodeStore.nodesRef,
@@ -461,6 +462,7 @@ export function WorkspaceCanvasInner({
         store.setIsSettingsOpen(true)
       }}
       createSpaceFromSelectedNodes={spacesApi.createSpaceFromSelectedNodes}
+      createEmptySpaceAtPoint={spacesApi.createEmptySpaceAtPoint}
       spaceTargetMountPicker={spacesApi.spaceTargetMountPicker}
       setSpaceTargetMountPicker={spacesApi.setSpaceTargetMountPicker}
       confirmSpaceTargetMountPicker={spacesApi.confirmSpaceTargetMountPicker}
