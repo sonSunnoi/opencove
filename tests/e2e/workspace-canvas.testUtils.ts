@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs'
+import { accessSync, constants, existsSync } from 'node:fs'
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'path'
@@ -21,7 +21,12 @@ export function resolveE2ETmpDir(): string {
   }
 
   if (process.platform === 'linux' && isTruthyEnv(process.env['CI']) && existsSync('/mnt')) {
-    return '/mnt'
+    try {
+      accessSync('/mnt', constants.W_OK)
+      return '/mnt'
+    } catch {
+      // Fall through to RUNNER_TEMP/tmpdir when /mnt is not writable.
+    }
   }
 
   const runnerTempDir = process.env['RUNNER_TEMP']?.trim()
